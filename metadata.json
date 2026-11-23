@@ -1,0 +1,6 @@
+{
+  "name": "Mikrotik Hotspot Script Generator",
+  "description": "توليد سكربتات ميكروتيك هوت سبوت الإصدار السادس (v6.49) مع إعدادات السرعات والربط مع User Manager بالكامل وبأفضل الممارسات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
