@@ -8,6 +8,7 @@ import {
   calculateNetworkAddress,
   clampInt,
   escapeRosString,
+  isBridgeAssignablePort,
   sanitizeIpv4,
   sanitizeRosIdentifier,
 } from "./helpers.ts";
@@ -74,10 +75,36 @@ export function buildGeneratorContext(
   const lanIface = sanitizeRosIdentifier(config.lanInterface, "ether2");
   const bridgeName = sanitizeRosIdentifier(config.lanBridgeName || "bridge-lan", "bridge-lan");
   const effectiveLan = config.useLanBridge ? bridgeName : lanIface;
-  const bridgePorts = config.useLanBridge
-    ? (config.lanBridgePorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean)
-    : [];
-  const bridgePortSet = new Set(bridgePorts);
+  const isMultiWan = Boolean(config.loadBalancingMethod !== "none" && config.wanLines && config.wanLines.length > 0);
+  const wanPhysicalSet = new Set<string>(
+    isMultiWan
+      ? config.wanLines.map((l) => sanitizeRosIdentifier(l.interfaceName, "ether1")).filter(Boolean)
+      : [wanIface]
+  );
+  const hasVlans = Boolean(config.enableVlans && config.vlans && config.vlans.length > 0);
+
+  let bridgePorts: string[] = [];
+  let bridgePortSet = new Set<string>();
+  if (config.useLanBridge) {
+    const rawBridgePorts = (config.lanBridgePorts || "")
+      .split(",")
+      .map((p) => sanitizeRosIdentifier(p, ""))
+      .filter((p) => Boolean(p) && isBridgeAssignablePort(p) && p !== bridgeName && !wanPhysicalSet.has(p));
+    bridgePortSet = new Set<string>(rawBridgePorts);
+    if (hasVlans && config.enableBridgeVlanFiltering && config.vlans) {
+      config.vlans.forEach((v) => {
+        [v.taggedPorts || "", v.untaggedPorts || ""].forEach((portStr) => {
+          portStr
+            .split(",")
+            .map((p) => sanitizeRosIdentifier(p, ""))
+            .filter((p) => Boolean(p) && isBridgeAssignablePort(p) && p !== bridgeName && !wanPhysicalSet.has(p))
+            .forEach((p) => bridgePortSet.add(p));
+        });
+      });
+    }
+    bridgePorts = Array.from(bridgePortSet);
+  }
+
   const poolName = sanitizeRosIdentifier(config.poolName, "hs-pool-ether2");
   const serverName = sanitizeRosIdentifier(config.serverName, "hotspot1");
   const mainDnsName = sanitizeRosIdentifier(config.dnsName, "hotspot.local");
@@ -93,7 +120,6 @@ export function buildGeneratorContext(
   const networkAddress = calculateNetworkAddress(safeGatewayIp, safeSubnetMask, "192.168.80.0");
   const dnsServersStr =
     (config.dnsServers || []).map((s) => sanitizeIpv4(s, "")).filter(Boolean).join(",") || "8.8.8.8,1.1.1.1";
-  const hasVlans = Boolean(config.enableVlans && config.vlans && config.vlans.length > 0);
   const resolvedVlans: ResolvedVlan[] = hasVlans
     ? config.vlans.map((vlan, idx) => {
         const safeIdName = sanitizeRosIdentifier(
@@ -125,7 +151,6 @@ export function buildGeneratorContext(
       })
     : [];
   const hotspotEnabledVlans = resolvedVlans.filter((v) => v.enableHotspotOnVlan);
-  const isMultiWan = Boolean(config.loadBalancingMethod !== "none" && config.wanLines && config.wanLines.length > 0);
   const useAdvancedQueue = isV7 && (config.queueType === "cake" || config.queueType === "fq_codel");
   const activeQueueName = config.queueType === "cake" ? "cake-hotspot" : "fq-codel-hotspot";
   const radServerIpSafe = sanitizeIpv4(config.radiusServerIp, "127.0.0.1");

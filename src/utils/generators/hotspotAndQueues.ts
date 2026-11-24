@@ -57,6 +57,7 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
     script += `add name=fq-codel-hotspot kind=fq-codel fq-codel-limit=10240 fq-codel-target=5ms fq-codel-interval=100ms comment="FQ-CoDel Queue Type"\n\n`;
   }
 
+  script += `/queue simple remove [ find name="hs-parent-queue" ]\n`;
   if (useAdvancedQueue) {
     const queueTargets = [`${networkAddress}/${safeSubnetMask}`];
     if (hasVlans) {
@@ -74,7 +75,6 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
         maxLimitParam = ` max-limit=${rxNorm}/${txNorm}`;
       }
     }
-    script += `/queue simple remove [ find name="hs-parent-queue" ]\n`;
     script += `/queue simple\n`;
     script += `add name="hs-parent-queue" target=${queueTargets.join(",")} queue=${activeQueueName}/${activeQueueName}${maxLimitParam} comment="Hotspot Parent Queue (${config.queueType.toUpperCase()})"\n\n`;
   }
@@ -83,14 +83,6 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
   // Keep child dynamic Hotspot queues lightweight under hs-parent-queue so CAKE does not allocate per-client 16MiB rings
   const advQueueTypeParam = "";
 
-  if (config.enableTrial) {
-    script += `/ip hotspot user profile remove [ find name="trial-profile" ]\n`;
-  }
-  if (emitLocalHotspotProfiles) {
-    hotspotProfiles.forEach((profile) => {
-      script += `/ip hotspot user profile remove [ find name="${escapeRosString(profile.name)}" ]\n`;
-    });
-  }
   script += `/ip hotspot user profile\n`;
   const nasIdle = sanitizeRosIdentifier(config.nasIdleTimeout || "00:15:00", "00:15:00");
   const nasKeepalive = sanitizeRosIdentifier(config.nasKeepaliveTimeout || "00:02:00", "00:02:00");
@@ -117,14 +109,13 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
     const [tRxRaw = "256k", tTxRaw = "512k"] = (config.trialRateLimit || "256k/512k").split("/");
     const trialRate = `${normalizeRosRate(tRxRaw) || "256k"}/${normalizeRosRate(tTxRaw) || "512k"}`;
     script += `# Dedicated Free Trial User Profile\n`;
-    const trialParts = [
-      `add name="trial-profile"`,
+    const trialSetParams = [
       `rate-limit="${trialRate}"`,
       `shared-users=1`,
       parentQueueParam,
       advQueueTypeParam,
     ].filter(Boolean).join(" ");
-    script += `${trialParts}\n`;
+    script += `:if ([:len [find name="trial-profile"]] > 0) do={ set [find name="trial-profile"] ${trialSetParams} } else={ add name="trial-profile" ${trialSetParams} }\n`;
   }
 
   if (emitLocalHotspotProfiles) {
@@ -163,9 +154,9 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
         : "";
       const onLoginParam = onLoginRaw ? `on-login="${escapeRosString(onLoginRaw)}"` : "";
       const sharedParam = `shared-users=${Math.max(1, profile.sharedUsers || 1)}`;
+      const safeProfName = escapeRosString(profile.name);
 
-      const params = [
-        `name="${escapeRosString(profile.name)}"`,
+      const setParams = [
         rateParam,
         sharedParam,
         sessionParam,
@@ -184,7 +175,7 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
       ].filter(Boolean).join(" ");
 
       script += `# Hotspot Profile: ${escapeRosString(profile.displayName || profile.name)}\n`;
-      script += `add ${params}\n`;
+      script += `:if ([:len [find name="${safeProfName}"]] > 0) do={ set [find name="${safeProfName}"] ${setParams} } else={ add name="${safeProfName}" ${setParams} }\n`;
     });
   } else {
     script += `# (Local speed profiles omitted in User Manager RADIUS mode: User Manager controls speeds, quotas & validity in Section 9)\n`;
@@ -229,7 +220,7 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
   script += `${buildHotspotProfileCmd("hsprof1", safeGatewayIp, mainDnsName)}\n\n`;
 
   const addrPerMac = clampInt(config.addressesPerMac || 2, 1, 20, 2);
-  script += `/ip hotspot remove [ find name=${serverName} ]\n`;
+  script += `/ip hotspot remove [ find where name=${serverName} or interface=${effectiveLan} ]\n`;
   script += `/ip hotspot\n`;
   script += `add address-pool=${poolName} addresses-per-mac=${addrPerMac} disabled=no interface=${effectiveLan} name=${serverName} profile=hsprof1\n\n`;
 
@@ -241,7 +232,7 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
       script += `/ip hotspot profile remove [ find name="${vlanProfName}" ]\n`;
       script += `/ip hotspot profile\n`;
       script += `${buildHotspotProfileCmd(vlanProfName, vlan.gatewayIp, vlanDns)}\n`;
-      script += `/ip hotspot remove [ find name="hs-${vlan.safeVlanName}" ]\n`;
+      script += `/ip hotspot remove [ find where name="hs-${vlan.safeVlanName}" or interface="${vlan.safeVlanName}" ]\n`;
       script += `/ip hotspot\n`;
       script += `add address-pool="pool-${vlan.safeIdName}" addresses-per-mac=${addrPerMac} disabled=no interface="${vlan.safeVlanName}" name="hs-${vlan.safeVlanName}" profile="${vlanProfName}" comment="Hotspot on VLAN ${vlan.safeVlanId}"\n\n`;
     });
@@ -252,6 +243,15 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
     (b) => Boolean((b.macAddress || "").trim() || (b.ipAddress || "").trim())
   );
   if (validBindings.length > 0) {
+    validBindings.forEach((b) => {
+      const matchPredicates = [
+        b.macAddress?.trim() ? `mac-address=${sanitizeRosIdentifier(b.macAddress, "")}` : "",
+        b.ipAddress?.trim() ? `address=${sanitizeRosIdentifier(b.ipAddress, "")}` : "",
+      ].filter(Boolean);
+      if (matchPredicates.length > 0) {
+        script += `/ip hotspot ip-binding remove [ find where !dynamic and ${matchPredicates.join(" and ")} ]\n`;
+      }
+    });
     script += `/ip hotspot ip-binding\n`;
     validBindings.forEach((b) => {
       const parts = [
@@ -281,6 +281,9 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
       script += `# ---------------------------------------------------------------------\n`;
 
       if (domainEntries.length > 0) {
+        domainEntries.forEach((wg) => {
+          script += `/ip hotspot walled-garden remove [ find where !dynamic and dst-host="${escapeRosString(wg.domain.trim())}" ]\n`;
+        });
         script += `/ip hotspot walled-garden\n`;
         domainEntries.forEach((wg) => {
           script += `add action=allow dst-host="${escapeRosString(wg.domain.trim())}" comment="${escapeRosString(wg.comment || "Bypass Domain")}"\n`;
@@ -289,6 +292,16 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
       }
 
       if (ipOrHttpsEntries.length > 0) {
+        ipOrHttpsEntries.forEach((wg) => {
+          const val = wg.domain.trim();
+          const isIpOrCidr = /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(val);
+          if (wg.entryType === "ip" || isIpOrCidr) {
+            script += `/ip hotspot walled-garden ip remove [ find where !dynamic and dst-address=${sanitizeRosIdentifier(val, val)} ]\n`;
+          } else {
+            const cleanHost = val.replace(/^\*\./, "");
+            script += `/ip hotspot walled-garden ip remove [ find where !dynamic and dst-host="${escapeRosString(cleanHost)}" ]\n`;
+          }
+        });
         script += `/ip hotspot walled-garden ip\n`;
         ipOrHttpsEntries.forEach((wg) => {
           const val = wg.domain.trim();

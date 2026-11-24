@@ -61,6 +61,9 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
     });
     script += `\n`;
 
+    resolvedVlans.forEach((vlan) => {
+      script += `/ip address remove [ find where !dynamic and ((interface="${vlan.safeVlanName}" and address="${vlan.gatewayIp}/${vlan.subnetMask}") or comment="IP Gateway for ${vlan.safeVlanName}") ]\n`;
+    });
     script += `/ip address\n`;
     resolvedVlans.forEach((vlan) => {
       script += `add address=${vlan.gatewayIp}/${vlan.subnetMask} interface="${vlan.safeVlanName}" network=${vlan.network} comment="IP Gateway for ${vlan.safeVlanName}"\n`;
@@ -78,10 +81,11 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
       }
 
       if (vlan.dhcpEnabled) {
-        script += `/ip dhcp-server remove [ find name="dhcp-${vlan.safeVlanName}" ]\n`;
+        script += `/ip dhcp-server remove [ find where name="dhcp-${vlan.safeVlanName}" or interface="${vlan.safeVlanName}" ]\n`;
         script += `/ip dhcp-server\n`;
         script += `add address-pool=${poolNameVlan} disabled=no interface="${vlan.safeVlanName}" name="dhcp-${vlan.safeVlanName}" lease-time=1h\n`;
 
+        script += `/ip dhcp-server network remove [ find where address="${vlan.network}/${vlan.subnetMask}" or comment="DHCP Network for ${vlan.safeVlanName}" ]\n`;
         script += `/ip dhcp-server network\n`;
         script += `add address=${vlan.network}/${vlan.subnetMask} dns-server=${vlan.gatewayIp} gateway=${vlan.gatewayIp} netmask=${vlan.subnetMask} comment="DHCP Network for ${vlan.safeVlanName}"\n\n`;
       } else if (vlan.enableHotspotOnVlan) {
@@ -92,11 +96,22 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
     // Optional Bridge VLAN Filtering
     if (config.useLanBridge && config.enableBridgeVlanFiltering) {
       const untaggedCommands: string[] = [];
+      const bridgeVlanByVid = new Map<number, { tagged: Set<string>; untagged: Set<string> }>();
       resolvedVlans.forEach((vlan) => {
         const untagged = (vlan.untaggedPorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean);
+        const tagged = (vlan.taggedPorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean);
         untagged.forEach((port) => {
           untaggedCommands.push(`set [ find bridge="${escapeRosString(effectiveLan)}" interface=${port} ] pvid=${vlan.safeVlanId}`);
         });
+        if (!bridgeVlanByVid.has(vlan.safeVlanId)) {
+          bridgeVlanByVid.set(vlan.safeVlanId, {
+            tagged: new Set<string>([effectiveLan]),
+            untagged: new Set<string>(),
+          });
+        }
+        const entry = bridgeVlanByVid.get(vlan.safeVlanId)!;
+        tagged.forEach((p) => entry.tagged.add(p));
+        untagged.forEach((p) => entry.untagged.add(p));
       });
       if (untaggedCommands.length > 0) {
         script += `/interface bridge port\n`;
@@ -105,13 +120,15 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
         });
       }
 
+      bridgeVlanByVid.forEach((_, vid) => {
+        script += `/interface bridge vlan remove [ find where !dynamic and bridge="${escapeRosString(effectiveLan)}" and vlan-ids=${vid} ]\n`;
+      });
       script += `/interface bridge vlan\n`;
-      resolvedVlans.forEach((vlan) => {
-        const tagged = (vlan.taggedPorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean);
-        const untagged = (vlan.untaggedPorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean);
-        const taggedList = Array.from(new Set([effectiveLan, ...tagged])).join(",");
-        const untaggedClause = untagged.length > 0 ? ` untagged=${untagged.join(",")}` : "";
-        script += `add bridge="${escapeRosString(effectiveLan)}" vlan-ids=${vlan.safeVlanId} tagged=${taggedList}${untaggedClause}\n`;
+      bridgeVlanByVid.forEach(({ tagged, untagged }, vid) => {
+        const taggedList = Array.from(tagged).join(",");
+        const untaggedArr = Array.from(untagged);
+        const untaggedClause = untaggedArr.length > 0 ? ` untagged=${untaggedArr.join(",")}` : "";
+        script += `add bridge="${escapeRosString(effectiveLan)}" vlan-ids=${vid} tagged=${taggedList}${untaggedClause}\n`;
       });
 
       script += `/interface bridge\n`;
@@ -130,6 +147,15 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
     script += `\n`;
   }
 
+  // Sync defconf LAN interface list so MAC-Winbox / input rules do not lock out LAN or VLANs
+  const allLanIfaces = [effectiveLan, ...resolvedVlans.map((v) => v.safeVlanName)];
+  script += `:if ([:len [/interface list find name="LAN"]] > 0) do={\n`;
+  allLanIfaces.forEach((iface) => {
+    script += `  /interface list member remove [ find where list="LAN" and interface="${iface}" ]\n`;
+    script += `  /interface list member add list="LAN" interface="${iface}" comment="Hotspot LAN Member"\n`;
+  });
+  script += `}\n\n`;
+
   // 3. WAN Interface List, NAT & Multi-WAN Load Balancing
   const wanOutInterfaces = isMultiWan
     ? Array.from(new Set(config.wanLines.map(getWanOutInterface).filter(Boolean)))
@@ -146,6 +172,24 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
     script += `add interface=${iface} list=WAN_LIST\n`;
   });
   script += `\n`;
+
+  // Sync defconf WAN interface list if present
+  script += `:if ([:len [/interface list find name="WAN"]] > 0) do={\n`;
+  wanOutInterfaces.forEach((iface) => {
+    script += `  /interface list member remove [ find where list="WAN" and interface="${iface}" ]\n`;
+    script += `  /interface list member add list="WAN" interface="${iface}" comment="Hotspot WAN Member"\n`;
+  });
+  script += `}\n\n`;
+
+  // Clean previously generated NAT, Mangle, Routing Rules, and Multi-WAN Routes before re-adding
+  script += `/ip firewall nat remove [ find where !dynamic and (comment~"^NAT Masquerade for " or comment="NAT masquerade for single internet WAN") ]\n`;
+  script += `/ip firewall mangle remove [ find where !dynamic and (comment="Bypass Load Balancing for Local, VLAN & Modem Subnets" or comment="Allow Unauthenticated Hotspot Clients to Reach Login Portal" or comment~"^Mark incoming connection on " or comment~"^Route output via " or comment~"^PCC Rule " or comment~"^NTH Rule " or comment~"^NTH Final Rule " or comment~"^Mark routing via ") ]\n`;
+  if (isV7) {
+    script += `/routing rule remove [ find comment="Keep Local Subnet in main FIB" ]\n`;
+  } else {
+    script += `/ip route rule remove [ find comment="Keep Local Subnet in main FIB" ]\n`;
+  }
+  script += `/ip route remove [ find where !dynamic and (comment~"^Recursive Canary for " or comment~"^PCC " or comment~"^NTH " or comment~"^Fallback " or comment~"^Failover " or comment~"^Recursive Failover " or comment~"^ECMP ") ]\n\n`;
 
   if (isMultiWan) {
     const lines = config.wanLines;
@@ -197,10 +241,24 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
         }
       });
 
+      script += `/ip firewall address-list remove [ find list=LOCAL_SUBNETS ]\n`;
       script += `/ip firewall address-list\n`;
       localSubnets.forEach((subnet) => {
         script += `add address=${subnet} list=LOCAL_SUBNETS comment="Local/VLAN/Modem Subnet"\n`;
       });
+      script += `\n`;
+
+      if (isV7) {
+        script += `/routing rule\n`;
+        localSubnets.forEach((subnet) => {
+          script += `add action=lookup dst-address=${subnet} table=main comment="Keep Local Subnet in main FIB"\n`;
+        });
+      } else {
+        script += `/ip route rule\n`;
+        localSubnets.forEach((subnet) => {
+          script += `add action=lookup dst-address=${subnet} table=main comment="Keep Local Subnet in main FIB"\n`;
+        });
+      }
       script += `\n`;
 
       const lanMatcher = hasVlans ? `in-interface-list=HOTSPOT_LAN` : `in-interface=${effectiveLan}`;
@@ -276,11 +334,11 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
         });
       }
 
-      // Prerouting routing marks (one per WAN line)
-      lines.forEach((_, idx) => {
+      // Prerouting routing marks (one per WAN line, protected against local/LAN/VLAN subnets)
+      lines.forEach((line, idx) => {
         const connMark = `WAN${idx + 1}_conn`;
         const routeMark = `to_WAN${idx + 1}`;
-        script += `add action=mark-routing chain=prerouting connection-mark=${connMark} ${lanMatcher} new-routing-mark=${routeMark} passthrough=no\n`;
+        script += `add action=mark-routing chain=prerouting connection-mark=${connMark} dst-address-type=!local dst-address-list=!LOCAL_SUBNETS ${lanMatcher} new-routing-mark=${routeMark} passthrough=no comment="Mark routing via ${escapeRosString(line.name)}"\n`;
       });
       script += `\n`;
 
@@ -426,10 +484,11 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
   script += `/ip pool\n`;
   script += `add name=${poolName} ranges=${safePoolStart}-${safePoolEnd}\n\n`;
 
-  script += `/ip dhcp-server remove [ find name=dhcp-hs ]\n`;
+  script += `/ip dhcp-server remove [ find where name=dhcp-hs or interface=${effectiveLan} ]\n`;
   script += `/ip dhcp-server\n`;
   script += `add address-pool=${poolName} disabled=no interface=${effectiveLan} name=dhcp-hs lease-time=1h\n\n`;
 
+  script += `/ip dhcp-server network remove [ find where address="${networkAddress}/${safeSubnetMask}" or comment="Main Hotspot DHCP Network" ]\n`;
   script += `/ip dhcp-server network\n`;
   script += `add address=${networkAddress}/${safeSubnetMask} dns-server=${safeGatewayIp} gateway=${safeGatewayIp} netmask=${safeSubnetMask} comment="Main Hotspot DHCP Network"\n\n`;
 

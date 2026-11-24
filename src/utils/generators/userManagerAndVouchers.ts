@@ -53,6 +53,7 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
     script += `# 9. RADIUS Client & User Manager Setup (${isV7 ? "RouterOS v7 Syntax" : "RouterOS v6 Syntax"})\n`;
     script += `# ---------------------------------------------------------------------\n`;
     script += `# MikroTik RADIUS Client Configuration\n`;
+    script += `/radius remove [ find comment="Radius link for User Manager" ]\n`;
     script += `/radius\n`;
     script += `add service=hotspot address=${radServerIp} secret="${safeRadSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=${radTimeout}${srcAddressParam} comment="Radius link for User Manager"\n\n`;
 
@@ -65,16 +66,13 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
       script += `/user-manager\n`;
       script += `set enabled=yes\n\n`;
 
-      script += `/user-manager router remove [ find name="${safeUmRouter}" ]\n`;
       script += `/user-manager router\n`;
-      script += `add name="${safeUmRouter}" address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort}\n\n`;
+      script += `:if ([:len [find name="${safeUmRouter}"]] > 0) do={ set [find name="${safeUmRouter}"] address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort} } else={ add name="${safeUmRouter}" address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort} }\n\n`;
 
       if (umGroups.length > 0) {
-        umGroups.forEach((grp) => {
-          script += `/user-manager user group remove [ find name="${escapeRosString(grp.name)}" ]\n`;
-        });
         script += `/user-manager user group\n`;
         umGroups.forEach((grp) => {
+          const safeGrpName = escapeRosString(grp.name);
           const outerStr = (grp.outerAuths || []).map((a) => sanitizeRosIdentifier(a, "")).filter(Boolean).join(",");
           const innerStr = (grp.innerAuths || []).map((a) => sanitizeRosIdentifier(a, "")).filter(Boolean).join(",");
           const attrParts: string[] = [];
@@ -85,13 +83,14 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
           if (al) attrParts.push(`Mikrotik-Address-List:${al}`);
           if (fp) attrParts.push(`Framed-Pool:${fp}`);
 
-          const parts = [
-            `name="${escapeRosString(grp.name)}"`,
+          const grpSetParts = [
             outerStr ? `outer-auths=${outerStr}` : "",
             innerStr ? `inner-auths=${innerStr}` : "",
             attrParts.length > 0 ? `attributes="${escapeRosString(attrParts.join(","))}"` : "",
           ].filter(Boolean);
-          script += `add ${parts.join(" ")}\n`;
+          const setClause = grpSetParts.length > 0 ? `set [find name="${safeGrpName}"] ${grpSetParts.join(" ")}` : `:nothing`;
+          const addClause = [`name="${safeGrpName}"`, ...grpSetParts].join(" ");
+          script += `:if ([:len [find name="${safeGrpName}"]] > 0) do={ ${setClause} } else={ add ${addClause} }\n`;
         });
         script += `\n`;
       }
@@ -103,16 +102,15 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
           const safeLimName = escapeRosString(lim.name);
           const rx = normalizeRosRate(lim.rateLimitRx) || "512k";
           const tx = normalizeRosRate(lim.rateLimitTx) || "2M";
-          const parts = [
-            `name="${safeLimName}"`,
+          const limSetParts = [
             `rate-limit-rx=${rx}`,
             `rate-limit-tx=${tx}`,
           ];
 
           const minRx = normalizeRosRate(lim.rateLimitMinRx || "");
           const minTx = normalizeRosRate(lim.rateLimitMinTx || "");
-          if (minRx) parts.push(`rate-limit-min-rx=${minRx}`);
-          if (minTx) parts.push(`rate-limit-min-tx=${minTx}`);
+          if (minRx) limSetParts.push(`rate-limit-min-rx=${minRx}`);
+          if (minTx) limSetParts.push(`rate-limit-min-tx=${minTx}`);
 
           if (lim.rateLimitBurstRx?.trim() || lim.rateLimitBurstTx?.trim()) {
             const bRx = normalizeRosRate(lim.rateLimitBurstRx || "") || rx;
@@ -121,7 +119,7 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
             const btTx = normalizeRosRate(lim.rateLimitBurstThresholdTx || "") || tx;
             const bTimeRx = sanitizeRosIdentifier(lim.rateLimitBurstTimeRx || "8s", "8s");
             const bTimeTx = sanitizeRosIdentifier(lim.rateLimitBurstTimeTx || lim.rateLimitBurstTimeRx || "8s", "8s");
-            parts.push(
+            limSetParts.push(
               `rate-limit-burst-rx=${bRx}`,
               `rate-limit-burst-tx=${bTx}`,
               `rate-limit-burst-threshold-rx=${btRx}`,
@@ -133,29 +131,30 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
 
           const prio = lim.rateLimitPriority || 8;
           if (prio !== 8 || lim.rateLimitBurstRx?.trim() || lim.rateLimitBurstTx?.trim()) {
-            parts.push(`rate-limit-priority=${Math.min(8, Math.max(1, prio))}`);
+            limSetParts.push(`rate-limit-priority=${Math.min(8, Math.max(1, prio))}`);
           }
 
           if (lim.transferLimitMb && lim.transferLimitMb > 0) {
-            parts.push(`transfer-limit=${mbToBytes(lim.transferLimitMb)}`);
+            limSetParts.push(`transfer-limit=${mbToBytes(lim.transferLimitMb)}`);
           }
           if (lim.downloadLimitMb && lim.downloadLimitMb > 0) {
-            parts.push(`download-limit=${mbToBytes(lim.downloadLimitMb)}`);
+            limSetParts.push(`download-limit=${mbToBytes(lim.downloadLimitMb)}`);
           }
           if (lim.uploadLimitMb && lim.uploadLimitMb > 0) {
-            parts.push(`upload-limit=${mbToBytes(lim.uploadLimitMb)}`);
+            limSetParts.push(`upload-limit=${mbToBytes(lim.uploadLimitMb)}`);
           }
           if (lim.uptimeLimit?.trim() && lim.uptimeLimit.trim() !== "00:00:00" && lim.uptimeLimit.trim() !== "0s") {
-            parts.push(`uptime-limit=${sanitizeRosIdentifier(lim.uptimeLimit, "0s")}`);
+            limSetParts.push(`uptime-limit=${sanitizeRosIdentifier(lim.uptimeLimit, "0s")}`);
           }
           if (lim.resetCountersInterval && lim.resetCountersInterval !== "disabled") {
-            parts.push(`reset-counters-interval=${lim.resetCountersInterval}`);
+            limSetParts.push(`reset-counters-interval=${lim.resetCountersInterval}`);
             if (lim.resetCountersStartTime?.trim()) {
-              parts.push(`reset-counters-start-time=${sanitizeRosIdentifier(lim.resetCountersStartTime, "00:00:00")}`);
+              limSetParts.push(`reset-counters-start-time=${sanitizeRosIdentifier(lim.resetCountersStartTime, "00:00:00")}`);
             }
           }
 
-          script += `add ${parts.join(" ")}\n`;
+          const limSetStr = limSetParts.join(" ");
+          script += `:if ([:len [find name="${safeLimName}"]] > 0) do={ set [find name="${safeLimName}"] ${limSetStr} } else={ add name="${safeLimName}" ${limSetStr} }\n`;
         });
         script += `\n`;
 
@@ -167,9 +166,11 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
             const validity = prof.validity?.trim() ? sanitizeRosIdentifier(prof.validity, "unlimited") : "unlimited";
             const startsWhen = prof.startsWhen || "first-auth";
             const overrideShared = sanitizeRosIdentifier(prof.overrideSharedUsers || "1", "1");
+            const profSetParams = `name-for-users="${safeDisplayName}" price=${prof.price || 0} validity=${validity} starts-when=${startsWhen} override-shared-users=${overrideShared}`;
 
             script += `/user-manager profile\n`;
-            script += `add name="${safeProfName}" name-for-users="${safeDisplayName}" price=${prof.price || 0} validity=${validity} starts-when=${startsWhen} override-shared-users=${overrideShared}\n`;
+            script += `:if ([:len [find name="${safeProfName}"]] > 0) do={ set [find name="${safeProfName}"] ${profSetParams} } else={ add name="${safeProfName}" ${profSetParams} }\n`;
+            script += `/user-manager profile-limitation remove [ find where profile="${safeProfName}" ]\n`;
 
             const validBindings = (prof.limitations || []).filter((b) => limById.has(b.limitationId));
             if (validBindings.length > 0) {
@@ -196,8 +197,9 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
       script += `/tool user-manager customer\n`;
       script += `:if ([:len [find login="${safeUmAdminUser}"]] = 0) do={ add login="${safeUmAdminUser}" password="${safeUmAdminPass}" permissions=owner comment="UM Master Account" }\n\n`;
 
+      const v6RouterSet = `ip-address=${radServerIp} shared-secret="${safeRadSecret}" use-coa=yes coa-port=${coaPort} comment="Connect UM Router"`;
       script += `/tool user-manager router\n`;
-      script += `add customer="${safeUmAdminUser}" name="${safeUmRouter}" ip-address=${radServerIp} shared-secret="${safeRadSecret}" use-coa=yes coa-port=${coaPort} comment="Connect UM Router"\n\n`;
+      script += `:if ([:len [find name="${safeUmRouter}"]] > 0) do={ set [find name="${safeUmRouter}"] ${v6RouterSet} } else={ add customer="${safeUmAdminUser}" name="${safeUmRouter}" ${v6RouterSet} }\n\n`;
 
       if (config.syncProfilesToUserman && umLims.length > 0) {
         script += `# User Manager v6 Limitations (RX = Client Upload, TX = Client Download)\n`;
@@ -210,17 +212,16 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
           const dlBytes = lim.downloadLimitMb && lim.downloadLimitMb > 0 ? mbToBytes(lim.downloadLimitMb) : 0;
           const ulBytes = lim.uploadLimitMb && lim.uploadLimitMb > 0 ? mbToBytes(lim.uploadLimitMb) : 0;
 
-          const parts = [
-            `owner="${safeUmAdminUser}"`,
-            `name="${safeLimName}"`,
+          // Note: RouterOS v6 allows owner= on add, but NOT on set
+          const v6LimSetParts = [
             `rate-limit-rx=${rx}`,
             `rate-limit-tx=${tx}`,
           ];
 
           const minRx = normalizeRosRate(lim.rateLimitMinRx || "");
           const minTx = normalizeRosRate(lim.rateLimitMinTx || "");
-          if (minRx) parts.push(`rate-limit-min-rx=${minRx}`);
-          if (minTx) parts.push(`rate-limit-min-tx=${minTx}`);
+          if (minRx) v6LimSetParts.push(`rate-limit-min-rx=${minRx}`);
+          if (minTx) v6LimSetParts.push(`rate-limit-min-tx=${minTx}`);
 
           if (lim.rateLimitBurstRx?.trim() || lim.rateLimitBurstTx?.trim()) {
             const bRx = normalizeRosRate(lim.rateLimitBurstRx || "") || rx;
@@ -229,7 +230,7 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
             const btTx = normalizeRosRate(lim.rateLimitBurstThresholdTx || "") || tx;
             const bTimeRx = sanitizeRosIdentifier(lim.rateLimitBurstTimeRx || "8s", "8s");
             const bTimeTx = sanitizeRosIdentifier(lim.rateLimitBurstTimeTx || lim.rateLimitBurstTimeRx || "8s", "8s");
-            parts.push(
+            v6LimSetParts.push(
               `rate-limit-burst-rx=${bRx}`,
               `rate-limit-burst-tx=${bTx}`,
               // RouterOS v6 User Manager limitation spells these properties without the first "h"
@@ -242,31 +243,32 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
 
           const prio = lim.rateLimitPriority || 8;
           if (prio !== 8 || lim.rateLimitBurstRx?.trim() || lim.rateLimitBurstTx?.trim()) {
-            parts.push(`rate-limit-priority=${Math.min(8, Math.max(1, prio))}`);
+            v6LimSetParts.push(`rate-limit-priority=${Math.min(8, Math.max(1, prio))}`);
           }
 
-          if (transferBytes > 0) parts.push(`transfer-limit=${transferBytes}`);
-          if (dlBytes > 0) parts.push(`download-limit=${dlBytes}`);
-          if (ulBytes > 0) parts.push(`upload-limit=${ulBytes}`);
+          if (transferBytes > 0) v6LimSetParts.push(`transfer-limit=${transferBytes}`);
+          if (dlBytes > 0) v6LimSetParts.push(`download-limit=${dlBytes}`);
+          if (ulBytes > 0) v6LimSetParts.push(`upload-limit=${ulBytes}`);
           if (transferBytes === 0 && dlBytes === 0 && ulBytes === 0) {
-            parts.push(`transfer-limit=0`);
+            v6LimSetParts.push(`transfer-limit=0`);
           }
 
           if (lim.uptimeLimit?.trim() && lim.uptimeLimit.trim() !== "00:00:00" && lim.uptimeLimit.trim() !== "0s") {
             const up = lim.uptimeLimit.trim();
             if (/^\d{1,2}:\d{2}:\d{2}$/.test(up)) {
               const [h, m, s] = up.split(":").map(Number);
-              parts.push(`uptime-limit=${(h || 0) * 3600 + (m || 0) * 60 + (s || 0)}s`);
+              v6LimSetParts.push(`uptime-limit=${(h || 0) * 3600 + (m || 0) * 60 + (s || 0)}s`);
             } else {
-              parts.push(`uptime-limit=${sanitizeRosIdentifier(up, "0s")}`);
+              v6LimSetParts.push(`uptime-limit=${sanitizeRosIdentifier(up, "0s")}`);
             }
           }
 
-          if (lim.v6GroupName?.trim()) parts.push(`group-name="${escapeRosString(lim.v6GroupName.trim())}"`);
-          if (lim.v6IpPool?.trim()) parts.push(`ip-pool="${escapeRosString(lim.v6IpPool.trim())}"`);
-          if (lim.v6AddressList?.trim()) parts.push(`address-list="${escapeRosString(lim.v6AddressList.trim())}"`);
+          if (lim.v6GroupName?.trim()) v6LimSetParts.push(`group-name="${escapeRosString(lim.v6GroupName.trim())}"`);
+          if (lim.v6IpPool?.trim()) v6LimSetParts.push(`ip-pool="${escapeRosString(lim.v6IpPool.trim())}"`);
+          if (lim.v6AddressList?.trim()) v6LimSetParts.push(`address-list="${escapeRosString(lim.v6AddressList.trim())}"`);
 
-          script += `add ${parts.join(" ")}\n`;
+          const v6LimSetStr = v6LimSetParts.join(" ");
+          script += `:if ([:len [find name="${safeLimName}"]] > 0) do={ set [find name="${safeLimName}"] ${v6LimSetStr} } else={ add owner="${safeUmAdminUser}" name="${safeLimName}" ${v6LimSetStr} }\n`;
         });
         script += `\n`;
 
@@ -279,9 +281,11 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
             const rawVal = (prof.validity || "").trim();
             const v6Validity = !rawVal || rawVal === "unlimited" ? "0s" : sanitizeRosIdentifier(rawVal, "30d");
             const overrideShared = sanitizeRosIdentifier(prof.overrideSharedUsers || "1", "1");
+            const v6ProfSet = `name-for-users="${safeDisplayName}" validity=${v6Validity} price=${prof.price || 0} starts-at=${startsAt} override-shared-users=${overrideShared}`;
 
             script += `/tool user-manager profile\n`;
-            script += `add owner="${safeUmAdminUser}" name="${safeProfName}" name-for-users="${safeDisplayName}" validity=${v6Validity} price=${prof.price || 0} starts-at=${startsAt} override-shared-users=${overrideShared}\n`;
+            script += `:if ([:len [find name="${safeProfName}"]] > 0) do={ set [find name="${safeProfName}"] ${v6ProfSet} } else={ add owner="${safeUmAdminUser}" name="${safeProfName}" ${v6ProfSet} }\n`;
+            script += `/tool user-manager profile profile-limitation remove [ find where profile="${safeProfName}" ]\n`;
 
             const validBindings = (prof.limitations || []).filter((b) => limById.has(b.limitationId));
             if (validBindings.length > 0) {
@@ -306,25 +310,28 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
   }
 
   // 10. Automated Maintenance & Scheduler
-  if (config.enableAutoCleanScript || config.enableScheduledReboot) {
-    script += `# ---------------------------------------------------------------------\n`;
-    script += `# 10. System Scheduler & Housekeeping / سكربتات الصيانة والتنظيف التلقائي\n`;
-    script += `# ---------------------------------------------------------------------\n`;
+  script += `# ---------------------------------------------------------------------\n`;
+  script += `# 10. System Scheduler & Housekeeping / سكربتات الصيانة والتنظيف التلقائي\n`;
+  script += `# ---------------------------------------------------------------------\n`;
 
-    if (config.enableAutoCleanScript) {
-      script += `/system script remove [ find name=clean_hotspot_hosts ]\n`;
-      script += `/system script\n`;
-      script += `add name=clean_hotspot_hosts source=":foreach i in=[/ip hotspot host find where !authorized] do={ /ip hotspot host remove \\$i }"\n`;
-      script += `/system scheduler remove [ find name=schedule_clean_hosts ]\n`;
-      script += `/system scheduler\n`;
-      script += `add name=schedule_clean_hosts interval=1d start-time=03:00:00 on-event=clean_hotspot_hosts comment="Clean unauthenticated host cache daily at 3 AM"\n\n`;
-    }
+  if (config.enableAutoCleanScript) {
+    script += `/system script remove [ find name=clean_hotspot_hosts ]\n`;
+    script += `/system script\n`;
+    script += `add name=clean_hotspot_hosts source=":foreach i in=[/ip hotspot host find where !authorized] do={ /ip hotspot host remove \\$i }"\n`;
+    script += `/system scheduler remove [ find name=schedule_clean_hosts ]\n`;
+    script += `/system scheduler\n`;
+    script += `add name=schedule_clean_hosts interval=1d start-time=03:00:00 on-event=clean_hotspot_hosts comment="Clean unauthenticated host cache daily at 3 AM"\n\n`;
+  } else {
+    script += `/system scheduler remove [ find name=schedule_clean_hosts ]\n`;
+    script += `/system script remove [ find name=clean_hotspot_hosts ]\n`;
+  }
 
-    if (config.enableScheduledReboot) {
-      script += `/system scheduler remove [ find name=schedule_weekly_reboot ]\n`;
-      script += `/system scheduler\n`;
-      script += `add name=schedule_weekly_reboot interval=7d start-time=04:00:00 on-event="/system reboot" comment="Weekly router reboot for RAM refresh"\n\n`;
-    }
+  if (config.enableScheduledReboot) {
+    script += `/system scheduler remove [ find name=schedule_weekly_reboot ]\n`;
+    script += `/system scheduler\n`;
+    script += `add name=schedule_weekly_reboot interval=7d start-time=04:00:00 on-event="/system reboot" comment="Weekly router reboot for RAM refresh"\n\n`;
+  } else {
+    script += `/system scheduler remove [ find name=schedule_weekly_reboot ]\n\n`;
   }
 
   // 11. Batch Voucher Cards Generator (CSPRNG-generated in browser; works across all v6 & v7 versions)
@@ -375,9 +382,9 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
       const code = escapeRosString(rawCode);
       if (voucherTarget === "userman") {
         if (isV7) {
-          script += `:if ([:len [/user-manager user find name="${code}"]] = 0) do={ /user-manager user add name="${code}" password="${code}"${groupAttr} shared-users=${shared}; /user-manager user-profile add user="${code}" profile="${safeTargetProf}" }\n`;
+          script += `:if ([:len [/user-manager user find name="${code}"]] = 0) do={ /user-manager user add name="${code}" password="${code}"${groupAttr} shared-users=${shared}; :if ([:len [/user-manager profile find name="${safeTargetProf}"]] > 0) do={ /user-manager user-profile add user="${code}" profile="${safeTargetProf}" } }\n`;
         } else {
-          script += `:if ([:len [/tool user-manager user find username="${code}"]] = 0) do={ /tool user-manager user add username="${code}" password="${code}" customer="${safeUmCustomer}" shared-users=${shared}; /tool user-manager user create-and-activate-profile numbers=[find username="${code}"] customer="${safeUmCustomer}" profile="${safeTargetProf}" }\n`;
+          script += `:if ([:len [/tool user-manager user find username="${code}"]] = 0) do={ /tool user-manager user add username="${code}" password="${code}" customer="${safeUmCustomer}" shared-users=${shared}; :if ([:len [/tool user-manager profile find name="${safeTargetProf}"]] > 0) do={ /tool user-manager user create-and-activate-profile numbers=[find username="${code}"] customer="${safeUmCustomer}" profile="${safeTargetProf}" } }\n`;
         }
       } else {
         script += `:if ([:len [/ip hotspot user find name="${code}"]] = 0) do={ /ip hotspot user add name="${code}" password="${code}" profile="${safeTargetProf}"${limitUptime}${limitBytes} }\n`;

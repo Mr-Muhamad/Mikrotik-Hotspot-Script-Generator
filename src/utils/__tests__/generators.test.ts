@@ -285,7 +285,7 @@ test("userman_radius mode omits conflicting local profiles and emits official v7
   assert.match(v7, /use-radius=yes/);
   assert.doesNotMatch(v7, /name="hs-2M" rate-limit=/);
   assert.doesNotMatch(v7, /set \[ find default=yes \] name=default rate-limit=/);
-  assert.match(v7, /\/user-manager user group\nadd name="vip-group" outer-auths=pap,chap,mschap2 inner-auths=peap-mschap2 attributes="Mikrotik-Group:hs-2M,Mikrotik-Address-List:um_vip,Framed-Pool:hs-pool-ether2"/);
+  assert.match(v7, /\/user-manager user group\n:if \(\[:len \[find name="vip-group"\]\] > 0\) do=\{ set \[find name="vip-group"\] outer-auths=pap,chap,mschap2 inner-auths=peap-mschap2 attributes="Mikrotik-Group:hs-2M,Mikrotik-Address-List:um_vip,Framed-Pool:hs-pool-ether2" \} else=\{ add name="vip-group" outer-auths=pap,chap,mschap2 inner-auths=peap-mschap2 attributes="Mikrotik-Group:hs-2M,Mikrotik-Address-List:um_vip,Framed-Pool:hs-pool-ether2" \}/);
   assert.match(v7, /name="lim_day" rate-limit-rx=512k rate-limit-tx=2M rate-limit-min-rx=256k rate-limit-min-tx=1M rate-limit-burst-rx=1M rate-limit-burst-tx=4M rate-limit-burst-threshold-rx=384k rate-limit-burst-threshold-tx=1500k rate-limit-burst-time-rx=8s rate-limit-burst-time-tx=8s rate-limit-priority=8 transfer-limit=5368709120 reset-counters-interval=monthly reset-counters-start-time=00:00:00/);
   assert.match(v7, /add profile="UM-DayNight" limitation="lim_day" from-time=08:00:00 till-time=23:59:59/);
   assert.match(v7, /add profile="UM-DayNight" limitation="lim_night" from-time=00:00:00 till-time=07:59:59/);
@@ -741,4 +741,363 @@ test("stripConfigSecrets clears credentials without mutating original config and
   assert.match(enReadme, /alogin\.html/);
   assert.match(arReadme, /status\.html/);
   assert.match(arReadme, /md5\.js/);
+});
+
+function assertValidRouterOsScript(script: string, label: string): void {
+  assert.ok(!script.includes("\u2014"), `${label}: forbidden em-dash detected`);
+
+  const rawLines = script.split(/\r?\n/);
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    assert.doesNotMatch(line, /\b(?:undefined|NaN|null)\b/, `${label} line ${i + 1}: unexpected JS token: ${line}`);
+    assert.ok(!line.includes("[object Object]"), `${label} line ${i + 1}: [object Object] detected`);
+
+    if (/\\$/.test(trimmed)) {
+      const nextLine = (rawLines[i + 1] || "").trim();
+      assert.ok(
+        nextLine.length > 0 && !nextLine.startsWith("#"),
+        `${label} line ${i + 1}: trailing line continuation followed by empty/comment line`
+      );
+    }
+  }
+
+  // Reconstruct logical statements via "\" continuations and multi-line "{ ... }" blocks,
+  // then verify balanced quotes, brackets, braces, and parens.
+  const logicalStatements: string[] = [];
+  let buffer = "";
+  let braceDepth = 0;
+  let inMultilineString = false;
+
+  const updateScanState = (chunk: string) => {
+    for (let i = 0; i < chunk.length; i++) {
+      const ch = chunk[i];
+      if (inMultilineString) {
+        if (ch === "\\") {
+          i++;
+          continue;
+        }
+        if (ch === '"') inMultilineString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inMultilineString = true;
+      } else if (ch === "{") {
+        braceDepth++;
+      } else if (ch === "}") {
+        braceDepth = Math.max(0, braceDepth - 1);
+      }
+    }
+  };
+
+  for (const rawLine of rawLines) {
+    const trimmedRight = rawLine.replace(/\s+$/, "");
+    const trimmed = trimmedRight.trim();
+    if (!buffer && braceDepth === 0 && (!trimmed || trimmed.startsWith("#"))) continue;
+    if (/\\$/.test(trimmedRight)) {
+      const part = trimmedRight.slice(0, -1) + " ";
+      updateScanState(part);
+      buffer += part;
+    } else {
+      updateScanState(trimmedRight);
+      buffer += (buffer ? "\n" : "") + trimmedRight;
+      if (braceDepth === 0 && !inMultilineString) {
+        logicalStatements.push(buffer);
+        buffer = "";
+      }
+    }
+  }
+  if (buffer) logicalStatements.push(buffer);
+
+  for (const stmt of logicalStatements) {
+    let inString = false;
+    const stack: string[] = [];
+    for (let i = 0; i < stmt.length; i++) {
+      const ch = stmt[i];
+      if (inString) {
+        if (ch === "\\") {
+          i++;
+          continue;
+        }
+        if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+      } else if (ch === "[") {
+        stack.push("]");
+      } else if (ch === "{") {
+        stack.push("}");
+      } else if (ch === "(") {
+        stack.push(")");
+      } else if (ch === "]" || ch === "}" || ch === ")") {
+        const expected = stack.pop();
+        assert.equal(ch, expected, `${label}: unbalanced "${ch}" in statement: ${stmt}`);
+      }
+    }
+    assert.equal(inString, false, `${label}: unclosed string literal in statement: ${stmt}`);
+    assert.equal(stack.length, 0, `${label}: unclosed delimiter(s) ${stack.join(",")} in statement: ${stmt}`);
+
+    if (/^\/(?:ip firewall (?:filter|nat|mangle)|ip hotspot (?:walled-garden|ip-binding))\s+remove\b/.test(stmt)) {
+      assert.match(stmt, /!dynamic/, `${label}: remove command missing !dynamic guard: ${stmt}`);
+    }
+  }
+
+  // Definition-before-reference checks
+  if (script.includes("in-interface-list=WAN_LIST")) {
+    const defIdx = script.indexOf("add name=WAN_LIST");
+    const refIdx = script.indexOf("in-interface-list=WAN_LIST");
+    assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: WAN_LIST referenced before definition`);
+  }
+  if (script.includes("in-interface-list=HOTSPOT_LAN")) {
+    const defIdx = script.indexOf("add name=HOTSPOT_LAN");
+    const refIdx = script.indexOf("in-interface-list=HOTSPOT_LAN");
+    assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: HOTSPOT_LAN referenced before definition`);
+  }
+  if (script.includes("dst-address-list=HOTSPOT_GW_IPS")) {
+    const defIdx = script.indexOf("list=HOTSPOT_GW_IPS");
+    const refIdx = script.indexOf("dst-address-list=HOTSPOT_GW_IPS");
+    assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: HOTSPOT_GW_IPS referenced before definition`);
+  }
+  if (script.includes("dst-address-list=LOCAL_SUBNETS")) {
+    const defIdx = script.indexOf("list=LOCAL_SUBNETS");
+    const refIdx = script.indexOf("dst-address-list=LOCAL_SUBNETS");
+    assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: LOCAL_SUBNETS referenced before definition`);
+  }
+  if (script.includes('parent-queue="hs-parent-queue"')) {
+    const defIdx = script.indexOf('add name="hs-parent-queue"');
+    const refIdx = script.indexOf('parent-queue="hs-parent-queue"');
+    assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: hs-parent-queue referenced before definition`);
+  }
+  assert.ok(script.indexOf("add name=hsprof1") > -1 || script.indexOf("name=hsprof1") > -1);
+  assert.ok(script.indexOf("name=hsprof1") < script.indexOf("profile=hsprof1"), `${label}: hsprof1 must precede hotspot server`);
+}
+
+test("defconf compatibility, loopback RADIUS/DNS input ordering, wireless LAN bridge detachment, and portal static DNS", () => {
+  const script = generateMikrotikScript(
+    makeBaseConfig({
+      rosVersion: "v7",
+      authMode: "userman_radius",
+      useLanBridge: false,
+      lanInterface: "wifi1",
+      dnsName: "wifi.cafe",
+      enableVlans: true,
+      vlans: [
+        {
+          id: "v10",
+          name: "vlan10_guest",
+          vlanId: 10,
+          parentInterface: "ether2",
+          gatewayIp: "172.16.10.1",
+          subnetMask: 24,
+          dhcpEnabled: true,
+          poolStart: "172.16.10.10",
+          poolEnd: "172.16.10.254",
+          enableHotspotOnVlan: true,
+          hotspotDnsName: "guest.wifi.cafe",
+        },
+      ],
+      loadBalancingMethod: "pcc",
+      wanLines: [
+        { id: "w1", name: "W1", interfaceName: "ether1", gatewayIp: "192.168.1.1", distance: 1, weight: 1, type: "dhcp" },
+        { id: "w2", name: "W2", interfaceName: "ether3", gatewayIp: "192.168.2.1", distance: 2, weight: 1, type: "dhcp" },
+      ],
+    }),
+    sampleHotspotProfiles
+  );
+
+  // Standalone wifi1 LAN and Multi-WAN ether3 must be detached from defconf bridges without crashing /interface ethernet
+  assert.doesNotMatch(script, /\[ find default-name="?wifi1"? \]/);
+  assert.match(script, /\/interface bridge port remove \[ find interface=wifi1 \]/);
+  assert.match(script, /\/interface bridge port remove \[ find interface=ether3 \]/);
+
+  // defconf LAN & WAN interface lists synced so !LAN drop never locks out Hotspot/VLANs/Winbox
+  assert.match(script, /:if \(\[:len \[\/interface list find name="LAN"\]\] > 0\) do=\{/);
+  assert.match(script, /add list="LAN" interface="wifi1"/);
+  assert.match(script, /add list="LAN" interface="vlan10_guest"/);
+  assert.match(script, /:if \(\[:len \[\/interface list find name="WAN"\]\] > 0\) do=\{/);
+  assert.match(script, /add list="WAN" interface="ether3"/);
+
+  // Input chain places loopback, DNS/DHCP, and Captive Portal HTTP/HTTPS above defconf input drop
+  assert.match(script, /src-address=127\.0\.0\.1 dst-address=127\.0\.0\.1 comment="Allow Localhost Loopback \(RADIUS & CoA\)" place-before=\$inDrop/);
+  assert.match(script, /dst-port=53,67 in-interface-list=HOTSPOT_LAN comment="Allow Hotspot LAN\/VLAN DNS & DHCP" place-before=\$inDrop/);
+  assert.match(script, /dst-port=80,443,64872-64875 dst-address-list=HOTSPOT_GW_IPS in-interface-list=HOTSPOT_LAN comment="Allow Hotspot Captive Portal HTTP\/HTTPS" place-before=\$inDrop/);
+
+  // Static DNS records resolve portal hostnames cleanly even post-authentication
+  assert.match(script, /\/ip dns static\nadd name="wifi\.cafe" address=192\.168\.80\.1 comment="Hotspot Portal DNS"/);
+  assert.match(script, /add name="guest\.wifi\.cafe" address=172\.16\.10\.1 comment="Hotspot Portal DNS"/);
+});
+
+test("Idempotent re-import guards, non-destructive UM v6/v7 upserts, and Multi-WAN local FIB protection", () => {
+  const baseMulti = makeBaseConfig({
+    rosVersion: "v7",
+    authMode: "userman_radius",
+    loadBalancingMethod: "pcc",
+    enableAutoCleanScript: false,
+    enableScheduledReboot: false,
+    preventSharingTtl: false,
+    ipBindings: [{ id: "ib1", macAddress: "AA:BB:CC:DD:EE:FF", type: "bypassed", comment: "Printer" }],
+    walledGardenDomains: [{ id: "wg1", domain: "*.pay.example", entryType: "domain", includeHttpsIp: true }],
+  });
+
+  const v7 = generateMikrotikScript(baseMulti, sampleHotspotProfiles);
+  assert.match(v7, /\/system clock\nset time-zone-autodetect=no/);
+  assert.match(v7, /\/system ntp client servers remove \[ find address=pool\.ntp\.org \]/);
+  assert.match(v7, /\/ip dhcp-server network remove \[ find where address="192\.168\.80\.0\/24" or comment="Main Hotspot DHCP Network" \]/);
+  assert.match(v7, /\/ip hotspot ip-binding remove \[ find where !dynamic and mac-address=AA:BB:CC:DD:EE:FF \]/);
+  assert.match(v7, /\/ip hotspot walled-garden remove \[ find where !dynamic and dst-host="\*\.pay\.example" \]/);
+  assert.match(v7, /\/ip hotspot walled-garden ip remove \[ find where !dynamic and dst-host="pay\.example" \]/);
+  assert.match(v7, /\/routing rule remove \[ find comment="Keep Local Subnet in main FIB" \]/);
+  assert.match(v7, /\/routing rule\nadd action=lookup dst-address=192\.168\.80\.0\/24 table=main comment="Keep Local Subnet in main FIB"/);
+  assert.match(v7, /add action=mark-routing chain=prerouting connection-mark=WAN1_conn dst-address-type=!local dst-address-list=!LOCAL_SUBNETS/);
+  assert.match(v7, /\/ip firewall nat remove \[ find where !dynamic and /);
+  assert.match(v7, /\/ip firewall mangle remove \[ find where !dynamic and /);
+  assert.match(v7, /\/ip firewall filter remove \[ find where !dynamic and /);
+  assert.match(v7, /\/radius remove \[ find comment="Radius link for User Manager" \]/);
+  assert.match(v7, /\/system scheduler remove \[ find name=schedule_weekly_reboot \]/);
+
+  // RouterOS v6 must omit owner= and customer= in set[...] while keeping them in add[...]
+  const v6 = generateMikrotikScript({ ...baseMulti, rosVersion: "v6" }, sampleHotspotProfiles);
+  assert.match(v6, /\/ip route rule\nadd action=lookup dst-address=192\.168\.80\.0\/24 table=main comment="Keep Local Subnet in main FIB"/);
+  assert.match(v6, /set \[find name="Router1"\] ip-address=/);
+  assert.doesNotMatch(v6, /set \[find name="Router1"\] [^}]*customer=/);
+  assert.match(v6, /else=\{ add customer="admin" name="Router1"/);
+  assert.doesNotMatch(v6, /set \[find name="lim_1M"\] [^}]*owner=/);
+  assert.match(v6, /else=\{ add owner="admin" name="lim_1M"/);
+});
+
+test("Cross-feature validation catches PPPoE blank users, UM group CHAP/PAP mismatches, and VLAN/voucher edge cases", () => {
+  const issues = validateConfiguration(
+    makeBaseConfig({
+      rosVersion: "v7",
+      authMode: "userman_radius",
+      loadBalancingMethod: "none",
+      singleWanType: "pppoe",
+      singleWanPppoeUser: "",
+      enableVlans: true,
+      useLanBridge: false,
+      enableBridgeVlanFiltering: true,
+      vlans: [
+        {
+          id: "v10",
+          name: "vlan10",
+          vlanId: 10,
+          parentInterface: "ether2",
+          gatewayIp: "172.16.10.1",
+          subnetMask: 24,
+          dhcpEnabled: false,
+          poolStart: "172.16.10.10",
+          poolEnd: "172.16.10.254",
+          enableHotspotOnVlan: true,
+        },
+      ],
+      loginHttpChap: true,
+      loginHttpPap: false,
+      umGroups: [{ id: "g1", name: "bad-group", outerAuths: ["pap"], innerAuths: [] }],
+      syncProfilesToUserman: false,
+      generateVouchersBatch: true,
+      voucherUmGroup: "missing-group",
+    }),
+    sampleHotspotProfiles
+  );
+
+  const ids = new Set(issues.map((i) => i.id));
+  assert.ok(ids.has("single_wan_pppoe_user_empty"));
+  assert.ok(ids.has("vlan_filtering_needs_bridge"));
+  assert.ok(ids.has("vlan_hotspot_without_dhcp_v10"));
+  assert.ok(ids.has("um_group_missing_chap_g1"));
+  assert.ok(ids.has("adv_voucher_um_sync_disabled"));
+  assert.ok(ids.has("adv_voucher_um_group_missing"));
+});
+
+test("End-to-End RouterOS .rsc structural & syntax verification across 24 feature combinations", () => {
+  const versions: Array<"v6" | "v7"> = ["v6", "v7"];
+  const authModes: Array<"hotspot_only" | "userman_radius" | "hybrid"> = ["hotspot_only", "userman_radius", "hybrid"];
+  const wanScenarios: Array<{
+    name: string;
+    patch: Partial<HotspotConfig>;
+  }> = [
+    { name: "single-dhcp", patch: { loadBalancingMethod: "none", singleWanType: "dhcp" } },
+    { name: "single-static", patch: { loadBalancingMethod: "none", singleWanType: "static", singleWanIp: "192.168.1.2/24", singleWanGateway: "192.168.1.1" } },
+    { name: "single-pppoe", patch: { loadBalancingMethod: "none", singleWanType: "pppoe", singleWanPppoeUser: "isp_user", singleWanPppoePass: 'p@ss"1$2' } },
+    {
+      name: "pcc-recursive-pppoe",
+      patch: {
+        loadBalancingMethod: "pcc",
+        enableRecursiveFailover: true,
+        stickyConnections: true,
+        wanLines: [
+          { id: "w1", name: "Fiber", interfaceName: "ether1", gatewayIp: "192.168.1.1", checkHost: "8.8.8.8", useInterfaceGateway: true, distance: 1, weight: 2, type: "static", staticIp: "192.168.1.2/30" },
+          { id: "w2", name: "DSL", interfaceName: "ether3", gatewayIp: "", pppoeUser: "dsl1", pppoePass: "sec1", checkHost: "1.1.1.1", distance: 2, weight: 1, type: "pppoe" },
+        ],
+      },
+    },
+    { name: "nth-direct", patch: { loadBalancingMethod: "nth", enableRecursiveFailover: false } },
+    { name: "ecmp-failover", patch: { loadBalancingMethod: "ecmp", enableRecursiveFailover: true } },
+  ];
+
+  const baseRichProfiles: HotspotUserProfile[] = [
+    ...sampleHotspotProfiles,
+    { ...sampleHotspotProfiles[0], id: "prof_exp", name: "hs-weekly", localValidity: "7d", localExpiryAction: "disable" },
+  ];
+
+  let count = 0;
+  for (const rosVersion of versions) {
+    for (const authMode of authModes) {
+      for (let i = 0; i < wanScenarios.length; i++) {
+        const wanScenario = wanScenarios[i];
+        const useBridge = i % 2 === 0;
+        const cfg = makeBaseConfig({
+          rosVersion,
+          authMode,
+          ...wanScenario.patch,
+          useLanBridge: useBridge,
+          lanBridgeName: "bridge-lan",
+          lanBridgePorts: "ether2,ether4,wlan1",
+          enableBridgeVlanFiltering: useBridge && i % 4 === 0,
+          enableVlans: i % 2 === 0,
+          isolateVlans: true,
+          vlans: [
+            {
+              id: "v10",
+              name: "vlan10_staff",
+              vlanId: 10,
+              parentInterface: "ether2",
+              gatewayIp: "172.16.10.1",
+              subnetMask: 24,
+              dhcpEnabled: true,
+              poolStart: "172.16.10.10",
+              poolEnd: "172.16.10.254",
+              enableHotspotOnVlan: true,
+              hotspotDnsName: "staff.hotspot.local",
+              taggedPorts: "ether4",
+              untaggedPorts: "ether5",
+            },
+          ],
+          queueType: rosVersion === "v7" && i % 2 === 0 ? "cake" : "simple",
+          parentQueueMaxLimit: "50M/100M",
+          enableTrial: i % 3 === 0,
+          preventSharingTtl: i % 2 === 1,
+          enableScheduledReboot: i % 3 === 1,
+          walledGardenDomains: [
+            { id: "wg1", domain: "*.whatsapp.com", entryType: "domain", includeHttpsIp: true },
+            { id: "wg2", domain: "104.16.0.0/12", entryType: "ip", includeHttpsIp: false },
+          ],
+          ipBindings: [{ id: "ib1", macAddress: "AA:BB:CC:DD:EE:01", ipAddress: "192.168.80.5", type: "bypassed" }],
+          generateVouchersBatch: true,
+          voucherCount: 5,
+          voucherCodes: generateCryptoVoucherCodes(5, 4),
+          voucherSelectedProfile: authMode === "hotspot_only" ? "hs-2M" : "UM-2M",
+          voucherTarget: authMode === "hybrid" ? "userman" : "auto",
+        });
+
+        const script = generateMikrotikScript(cfg, baseRichProfiles);
+        assertValidRouterOsScript(script, `${rosVersion}/${authMode}/${wanScenario.name}`);
+        count++;
+      }
+    }
+  }
+  assert.equal(count, 36);
 });

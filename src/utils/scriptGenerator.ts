@@ -22,6 +22,7 @@ export {
   calculateNetworkAddress,
   calculateSubnetPool,
   isPhysicalInterface,
+  isBridgeAssignablePort,
   getWanOutInterface,
   getWanGateway,
   getCanaryHost,

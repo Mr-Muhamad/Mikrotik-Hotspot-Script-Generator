@@ -121,7 +121,11 @@ export function calculateSubnetPool(
 }
 
 export function isPhysicalInterface(iface: string): boolean {
-  return Boolean(iface && !/^(bridge|vlan|wlan|pppoe|wg|l2tp|ovpn|sstp)/i.test(iface.trim()));
+  return Boolean(iface && !/^(bridge|vlan|wlan|wifi|pppoe|wg|l2tp|ovpn|sstp)/i.test(iface.trim()));
+}
+
+export function isBridgeAssignablePort(iface: string): boolean {
+  return Boolean(iface && !/^(bridge|vlan|pppoe|wg|l2tp|ovpn|sstp)/i.test(iface.trim()));
 }
 
 export function getWanOutInterface(line: WanLine): string {

@@ -200,6 +200,17 @@ export function validateConfiguration(
     }
   }
 
+  if (config.loadBalancingMethod === "none" && config.singleWanType === "pppoe" && !(config.singleWanPppoeUser || "").trim()) {
+    issues.push({
+      id: "single_wan_pppoe_user_empty",
+      severity: "error",
+      tab: 0,
+      field: "singleWanPppoeUser",
+      messageAr: "اسم مستخدم PPPoE مطلوب عند اختيار اتصال PPPoE في الخط الوحيد",
+      messageEn: "PPPoE username is required when Single WAN Type is PPPoE",
+    });
+  }
+
   if (config.loadBalancingMethod === "none" && config.singleWanType === "static") {
     if (parseIpv4ToInt(config.singleWanGateway) === null) {
       issues.push({
@@ -238,6 +249,17 @@ export function validateConfiguration(
 
   // Tab 1: VLANs
   if (config.enableVlans) {
+    if (config.enableBridgeVlanFiltering && !config.useLanBridge) {
+      issues.push({
+        id: "vlan_filtering_needs_bridge",
+        severity: "warning",
+        tab: 1,
+        field: "enableBridgeVlanFiltering",
+        messageAr: "تفعيل Bridge VLAN Filtering يتطلب تفعيل خيار LAN Bridge أولاً ليُطبق في السكربت",
+        messageEn: "Bridge VLAN Filtering requires LAN Bridge to be enabled",
+      });
+    }
+
     const seenIds = new Set<number>();
     const seenNames = new Set<string>();
     const seenVlanSubnets: { label: string; start: number; end: number; name: string }[] = [];
@@ -333,6 +355,17 @@ export function validateConfiguration(
             }
           }
           seenVlanSubnets.push({ ...vlanRange, name: vlan.name });
+        }
+
+        if (vlan.enableHotspotOnVlan && !vlan.dhcpEnabled) {
+          issues.push({
+            id: `vlan_hotspot_without_dhcp_${vlan.id}`,
+            severity: "warning",
+            tab: 1,
+            field: `vlan_${idx}_dhcpEnabled`,
+            messageAr: `الهوتسبوت مفعّل على VLAN "${vlan.name}" بينما خادم DHCP معطل؛ لن يحصل المشتركون على IP تلقائياً`,
+            messageEn: `Hotspot is enabled on VLAN "${vlan.name}" while DHCP is disabled; clients will not receive an IP automatically`,
+          });
         }
 
         if (vlan.dhcpEnabled || vlan.enableHotspotOnVlan) {
@@ -451,15 +484,27 @@ export function validateConfiguration(
             canaryCounts.set(canary, (canaryCounts.get(canary) || 0) + 1);
           }
         }
-      } else if (config.enableRecursiveFailover && line.checkHost?.trim() && parseIpv4ToInt(line.checkHost) === null) {
-        issues.push({
-          id: `wan_canary_invalid_${line.id}`,
-          severity: "error",
-          tab: 2,
-          field: `wan_${idx}_checkHost`,
-          messageAr: `هدف الفحص المتكرر على "${line.name}" غير صالح: "${line.checkHost}"`,
-          messageEn: `Invalid Recursive Ping Target on "${line.name}": "${line.checkHost}"`,
-        });
+      } else if (line.type === "pppoe") {
+        if (!(line.pppoeUser || "").trim()) {
+          issues.push({
+            id: `wan_pppoe_user_empty_${line.id}`,
+            severity: "error",
+            tab: 2,
+            field: `wan_${idx}_pppoeUser`,
+            messageAr: `اسم مستخدم PPPoE مطلوب على خط "${line.name}"`,
+            messageEn: `PPPoE username is required on WAN line "${line.name}"`,
+          });
+        }
+        if (config.enableRecursiveFailover && line.checkHost?.trim() && parseIpv4ToInt(line.checkHost) === null) {
+          issues.push({
+            id: `wan_canary_invalid_${line.id}`,
+            severity: "error",
+            tab: 2,
+            field: `wan_${idx}_checkHost`,
+            messageAr: `هدف الفحص المتكرر على "${line.name}" غير صالح: "${line.checkHost}"`,
+            messageEn: `Invalid Recursive Ping Target on "${line.name}": "${line.checkHost}"`,
+          });
+        }
       }
     });
 
@@ -737,6 +782,24 @@ export function validateConfiguration(
             messageAr: `مجموعة v7 "${grp.name}" لا تحتوي على طرق مصادقة (outer-auths) ولن يتمكن أعضاؤها من الدخول`,
             messageEn: `v7 User Group "${grp.name}" has no outer-auths enabled; members cannot authenticate`,
           });
+        } else if (config.loginHttpChap && !grp.outerAuths.includes("chap")) {
+          issues.push({
+            id: `um_group_missing_chap_${grp.id}`,
+            severity: "error",
+            tab: 4,
+            field: `umGrp_${idx}_auth`,
+            messageAr: `الهوتسبوت يستخدم HTTP-CHAP، لذا يجب تفعيل chap في outer-auths لمجموعة "${grp.name}"`,
+            messageEn: `Hotspot HTTP-CHAP login requires "chap" in outer-auths for group "${grp.name}"`,
+          });
+        } else if (!config.loginHttpChap && config.loginHttpPap && !grp.outerAuths.includes("pap")) {
+          issues.push({
+            id: `um_group_missing_pap_${grp.id}`,
+            severity: "error",
+            tab: 4,
+            field: `umGrp_${idx}_auth`,
+            messageAr: `الهوتسبوت يستخدم HTTP-PAP، لذا يجب تفعيل pap في outer-auths لمجموعة "${grp.name}"`,
+            messageEn: `Hotspot HTTP-PAP login requires "pap" in outer-auths for group "${grp.name}"`,
+          });
         }
       });
     }
@@ -781,6 +844,17 @@ export function validateConfiguration(
     }
   });
 
+  if (!config.loginHttpChap && !config.loginHttpPap) {
+    issues.push({
+      id: "adv_no_voucher_login_method",
+      severity: "warning",
+      tab: 5,
+      field: "loginHttpChap",
+      messageAr: "تم تعطيل HTTP-CHAP و HTTP-PAP معاً؛ لن يتمكن المشتركون من تسجيل الدخول عبر نموذج الكروت في الصفحة",
+      messageEn: "Both HTTP-CHAP and HTTP-PAP are disabled; standard voucher/password logins will not work",
+    });
+  }
+
   if (config.generateVouchersBatch) {
     const targetMode =
       effectiveAuthMode === "hotspot_only"
@@ -809,6 +883,36 @@ export function validateConfiguration(
             ? `Selected voucher profile ("${config.voucherSelectedProfile}") does not match any User Manager profile`
             : `Selected voucher profile ("${config.voucherSelectedProfile}") does not match any Hotspot user profile`,
       });
+    }
+
+    if (targetMode === "userman") {
+      if (!config.syncProfilesToUserman && config.radiusServerIp.trim() === "127.0.0.1") {
+        issues.push({
+          id: "adv_voucher_um_sync_disabled",
+          severity: "warning",
+          tab: 5,
+          field: "syncProfilesToUserman",
+          messageAr: "توليد كروت اليوزر مانجر مفعّل بينما مزامنة باقات اليوزر مانجر معطلة؛ تأكد أن الباقة موجودة مسبقاً على الراوتر",
+          messageEn: "User Manager voucher generation is enabled while User Manager profile sync is disabled",
+        });
+      }
+
+      const trimmedGroup = (config.voucherUmGroup || "").trim();
+      if (
+        config.rosVersion === "v7" &&
+        trimmedGroup &&
+        trimmedGroup !== "default" &&
+        !(config.umGroups || []).some((g) => g.name === trimmedGroup)
+      ) {
+        issues.push({
+          id: "adv_voucher_um_group_missing",
+          severity: "error",
+          tab: 5,
+          field: "voucherUmGroup",
+          messageAr: `مجموعة اليوزر مانجر المحددة للكروت ("${trimmedGroup}") غير موجودة في مجموعات v7`,
+          messageEn: `Selected voucher group ("${trimmedGroup}") does not exist in v7 User Manager groups`,
+        });
+      }
     }
   }
 

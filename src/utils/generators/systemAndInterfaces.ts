@@ -6,6 +6,7 @@
 import type { GeneratorContext } from "./context.ts";
 import {
   escapeRosString,
+  isBridgeAssignablePort,
   isPhysicalInterface,
   parseIpv4ToInt,
   sanitizeCidr,
@@ -25,11 +26,13 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
     lanIface,
     effectiveLan,
     bridgePorts,
+    mainDnsName,
     timeZoneName,
     safeGatewayIp,
     safeSubnetMask,
     networkAddress,
     dnsServersStr,
+    hotspotEnabledVlans,
     isMultiWan,
   } = ctx;
 
@@ -49,7 +52,7 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
   script += `set name="${escapeRosString(config.routerIdentity || "MikroTik-Hotspot")}"\n\n`;
 
   script += `/system clock\n`;
-  script += `set time-zone-name=${timeZoneName}\n\n`;
+  script += `set time-zone-autodetect=no time-zone-name=${timeZoneName}\n\n`;
 
   if (config.enableNtp) {
     const ntpList = (config.ntpServers || []).map((s) => s.trim()).filter(Boolean);
@@ -57,6 +60,10 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
     script += `/system ntp client\n`;
     if (isV7) {
       script += `set enabled=yes\n`;
+      activeNtp.forEach((srv) => {
+        const addr = sanitizeRosIdentifier(srv, "pool.ntp.org");
+        script += `/system ntp client servers remove [ find address=${addr} ]\n`;
+      });
       script += `/system ntp client servers\n`;
       activeNtp.forEach((srv) => {
         script += `add address=${sanitizeRosIdentifier(srv, "pool.ntp.org")}\n`;
@@ -74,13 +81,11 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
 
   const commentedPhysicalIfaces = new Set<string>();
   if (isPhysicalInterface(wanIface)) {
-    script += `/interface ethernet\n`;
-    script += `set [ find default-name=${wanIface} ] name=${wanIface} comment="Primary WAN Input / كارت دخول الإنترنت الرئيسي"\n`;
+    script += `:if ([:len [/interface ethernet find default-name="${wanIface}"]] > 0) do={ /interface ethernet set [ find default-name="${wanIface}" ] name=${wanIface} comment="Primary WAN Input / كارت دخول الإنترنت الرئيسي" }\n`;
     commentedPhysicalIfaces.add(wanIface);
   }
   if (!config.useLanBridge && isPhysicalInterface(lanIface) && !commentedPhysicalIfaces.has(lanIface)) {
-    if (commentedPhysicalIfaces.size === 0) script += `/interface ethernet\n`;
-    script += `set [ find default-name=${lanIface} ] name=${lanIface} comment="LAN - Hotspot Output / كارت خروج المشتركين"\n`;
+    script += `:if ([:len [/interface ethernet find default-name="${lanIface}"]] > 0) do={ /interface ethernet set [ find default-name="${lanIface}" ] name=${lanIface} comment="LAN - Hotspot Output / كارت خروج المشتركين" }\n`;
     commentedPhysicalIfaces.add(lanIface);
   }
   if (commentedPhysicalIfaces.size > 0) {
@@ -101,7 +106,7 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
       });
     }
     script += `\n`;
-  } else if (isPhysicalInterface(lanIface)) {
+  } else if (isBridgeAssignablePort(lanIface)) {
     script += `/interface bridge port remove [ find interface=${lanIface} ]\n\n`;
   }
 
@@ -111,20 +116,28 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
       const lineIface = sanitizeRosIdentifier(line.interfaceName, "ether1");
       const safeLineName = escapeRosString(line.name);
       if (isPhysicalInterface(lineIface) && !commentedPhysicalIfaces.has(lineIface)) {
-        script += `/interface ethernet\n`;
-        script += `set [ find default-name=${lineIface} ] name=${lineIface} comment="WAN Line: ${safeLineName}"\n\n`;
+        script += `:if ([:len [/interface ethernet find default-name="${lineIface}"]] > 0) do={ /interface ethernet set [ find default-name="${lineIface}" ] name=${lineIface} comment="WAN Line: ${safeLineName}" }\n`;
         commentedPhysicalIfaces.add(lineIface);
+      }
+      if (isBridgeAssignablePort(lineIface)) {
+        script += `/interface bridge port remove [ find interface=${lineIface} ]\n`;
+      }
+      if (line.type !== "dhcp") {
+        script += `/ip dhcp-client remove [ find interface=${lineIface} ]\n`;
+      }
+      const pppoeName = `pppoe-${sanitizeRosIdentifier(line.name, "WAN")}`;
+      if (line.type !== "pppoe") {
+        script += `/interface pppoe-client remove [ find name="${escapeRosString(pppoeName)}" ]\n`;
       }
 
       if (line.type === "dhcp") {
         script += `/ip dhcp-client remove [ find interface=${lineIface} ]\n`;
         script += `/ip dhcp-client\n`;
         script += `add interface=${lineIface} disabled=no add-default-route=no use-peer-dns=no comment="DHCP Client for ${safeLineName} (Multi-WAN managed routes)"\n\n`;
-      } else if (line.type === "pppoe" && line.pppoeUser) {
-        const pppoeName = `pppoe-${sanitizeRosIdentifier(line.name, "WAN")}`;
+      } else if (line.type === "pppoe") {
         script += `/interface pppoe-client remove [ find name="${escapeRosString(pppoeName)}" ]\n`;
         script += `/interface pppoe-client\n`;
-        script += `add name="${escapeRosString(pppoeName)}" interface=${lineIface} user="${escapeRosString(line.pppoeUser)}" password="${escapeRosString(line.pppoePass || "")}" disabled=no add-default-route=no use-peer-dns=no comment="PPPoE Client for ${safeLineName}"\n\n`;
+        script += `add name="${escapeRosString(pppoeName)}" interface=${lineIface} user="${escapeRosString(line.pppoeUser || "")}" password="${escapeRosString(line.pppoePass || "")}" disabled=no add-default-route=no use-peer-dns=no comment="PPPoE Client for ${safeLineName}"\n\n`;
       } else if (line.type === "static") {
         let staticCidr = sanitizeCidr(line.staticIp || "", "");
         if (!staticCidr && parseIpv4ToInt(line.gatewayIp || "") !== null) {
@@ -134,14 +147,23 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
           }
         }
         if (staticCidr) {
-          script += `/ip address remove [ find interface=${lineIface} address="${staticCidr}" ]\n`;
+          script += `/ip address remove [ find where !dynamic and ((interface=${lineIface} and address="${staticCidr}") or comment="Static IP for ${safeLineName}") ]\n`;
           script += `/ip address\n`;
           script += `add address=${staticCidr} interface=${lineIface} comment="Static IP for ${safeLineName}"\n\n`;
         }
       }
     });
   } else {
+    if (isBridgeAssignablePort(wanIface)) {
+      script += `/interface bridge port remove [ find interface=${wanIface} ]\n`;
+    }
     const singleType = config.singleWanType || "dhcp";
+    if (singleType !== "dhcp") {
+      script += `/ip dhcp-client remove [ find comment="Primary WAN DHCP Client" ]\n`;
+    }
+    if (singleType !== "pppoe") {
+      script += `/interface pppoe-client remove [ find name="pppoe-wan1" ]\n`;
+    }
     if (singleType === "dhcp") {
       script += `/ip dhcp-client remove [ find interface=${wanIface} ]\n`;
       script += `/ip dhcp-client\n`;
@@ -149,9 +171,10 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
     } else if (singleType === "static") {
       const wanAddr = sanitizeCidr(config.singleWanIp || "192.168.1.2/24", "192.168.1.2/24");
       const wanGw = sanitizeIpv4(config.singleWanGateway || "192.168.1.1", "192.168.1.1");
-      script += `/ip address remove [ find interface=${wanIface} address="${wanAddr}" ]\n`;
+      script += `/ip address remove [ find where !dynamic and ((interface=${wanIface} and address="${wanAddr}") or comment="Primary WAN Static IP") ]\n`;
       script += `/ip address\n`;
       script += `add address=${wanAddr} interface=${wanIface} comment="Primary WAN Static IP"\n\n`;
+      script += `/ip route remove [ find where !dynamic and comment="Primary WAN Default Route" ]\n`;
       script += `/ip route\n`;
       script += `add dst-address=0.0.0.0/0 gateway=${wanGw} check-gateway=ping comment="Primary WAN Default Route"\n\n`;
     } else if (singleType === "pppoe") {
@@ -162,13 +185,40 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
   }
 
   // IP Address for Primary LAN
-  script += `/ip address remove [ find interface=${effectiveLan} address="${safeGatewayIp}/${safeSubnetMask}" ]\n`;
+  script += `/ip address remove [ find where !dynamic and ((interface=${effectiveLan} and address="${safeGatewayIp}/${safeSubnetMask}") or comment="Hotspot Main Gateway IP / عنوان جيتواي الهوتسبوت الرئيسي") ]\n`;
   script += `/ip address\n`;
   script += `add address=${safeGatewayIp}/${safeSubnetMask} interface=${effectiveLan} network=${networkAddress} comment="Hotspot Main Gateway IP / عنوان جيتواي الهوتسبوت الرئيسي"\n\n`;
 
-  // DNS Cache Setup
+  // DNS Cache & Portal Static DNS Setup
   script += `/ip dns\n`;
-  script += `set allow-remote-requests=yes servers=${dnsServersStr} max-udp-packet-size=4096 cache-size=${config.enableDnsCache ? "8192KiB" : "2048KiB"}\n\n`;
+  script += `set allow-remote-requests=yes servers=${dnsServersStr} max-udp-packet-size=4096 cache-size=${config.enableDnsCache ? "8192KiB" : "2048KiB"}\n`;
+  const dnsToIps = new Map<string, Set<string>>();
+  const addPortalDns = (host: string, ip: string) => {
+    if (!dnsToIps.has(host)) dnsToIps.set(host, new Set());
+    dnsToIps.get(host)!.add(ip);
+  };
+  addPortalDns(mainDnsName, safeGatewayIp);
+  hotspotEnabledVlans.forEach((vlan) => {
+    const vlanDns = sanitizeRosIdentifier((vlan.hotspotDnsName || "").trim() || mainDnsName, mainDnsName);
+    addPortalDns(vlanDns, vlan.gatewayIp);
+  });
+  script += `/ip dns static remove [ find where !dynamic and comment="Hotspot Portal DNS" ]\n`;
+  const uniquePortalDns: Array<[string, string]> = [];
+  dnsToIps.forEach((ips, host) => {
+    if (ips.size === 1) {
+      uniquePortalDns.push([host, Array.from(ips)[0]]);
+    }
+  });
+  if (uniquePortalDns.length > 0) {
+    uniquePortalDns.forEach(([host]) => {
+      script += `/ip dns static remove [ find where !dynamic and name="${escapeRosString(host)}" ]\n`;
+    });
+    script += `/ip dns static\n`;
+    uniquePortalDns.forEach(([host, ip]) => {
+      script += `add name="${escapeRosString(host)}" address=${ip} comment="Hotspot Portal DNS"\n`;
+    });
+  }
+  script += `\n`;
 
   return script;
 }

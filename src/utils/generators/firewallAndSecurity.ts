@@ -28,16 +28,19 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
   script += `# 8. Firewall Security & FastTrack Bypass / حماية الجدار الناري وتجاوز الفاست تراك\n`;
   script += `# ---------------------------------------------------------------------\n`;
 
-  if (config.blockHotspotRouterAccess) {
-    const hotspotGwIps = new Set<string>([safeGatewayIp]);
-    hotspotEnabledVlans.forEach((vlan) => hotspotGwIps.add(vlan.gatewayIp));
-    script += `/ip firewall address-list remove [ find list=HOTSPOT_GW_IPS ]\n`;
-    script += `/ip firewall address-list\n`;
-    hotspotGwIps.forEach((ip) => {
-      script += `add address=${ip} list=HOTSPOT_GW_IPS comment="Hotspot Portal Gateway IP"\n`;
-    });
-    script += `\n`;
-  }
+  const hotspotGwIps = new Set<string>([safeGatewayIp]);
+  hotspotEnabledVlans.forEach((vlan) => hotspotGwIps.add(vlan.gatewayIp));
+  script += `/ip firewall address-list remove [ find list=HOTSPOT_GW_IPS ]\n`;
+  script += `/ip firewall address-list\n`;
+  hotspotGwIps.forEach((ip) => {
+    script += `add address=${ip} list=HOTSPOT_GW_IPS comment="Hotspot Portal Gateway IP"\n`;
+  });
+  script += `\n`;
+
+  // Clean previously generated firewall filter rules (!dynamic protects dynamic Hotspot chains)
+  script += `/ip firewall filter remove [ find where !dynamic and (comment="Drop Invalid Forward Packets" or comment="Isolate VLANs & Main LAN from Each Other" or comment="Bypass FastTrack for Hotspot Upload" or comment="Bypass FastTrack for Hotspot Download" or comment="Bypass FastTrack for Multi-WAN Mangle") ]\n`;
+  script += `/ip firewall filter remove [ find where !dynamic and (comment="Accept Established/Related Input" or comment="Drop Invalid Input Packets" or comment="Allow Localhost Loopback (RADIUS & CoA)" or comment="Allow Incoming RADIUS CoA" or comment="Block Hotspot Clients from Router Management Ports" or comment="Block Hotspot Clients from WebFig on Non-Portal IPs") ]\n`;
+  script += `/ip firewall filter remove [ find where !dynamic and (comment="Allow Hotspot LAN/VLAN DNS & DHCP" or comment="Allow Hotspot LAN/VLAN DNS TCP" or comment="Allow Hotspot Captive Portal HTTP/HTTPS" or comment="Drop WAN DNS UDP" or comment="Drop WAN DNS TCP" or comment="Drop SSH Brute Force Blacklist" or comment="SSH Brute Force Blacklist" or comment="SSH Brute Force Stage 2" or comment="SSH Brute Force Stage 1" or comment="Drop All Unsolicited Input from WAN (Protects Winbox/WebFig/SSH)") ]\n`;
 
   script += `/ip firewall filter\n`;
 
@@ -78,31 +81,60 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
     script += `}\n`;
   }
 
+  // Input chain: essential loopback, RADIUS CoA, and LAN/VLAN Hotspot service accepts
+  // MUST sit above any pre-existing defconf input drop rule.
+  const inputPreDropRules: string[] = [];
   if (config.enableFirewallHardening || config.blockWanManagement) {
-    script += `add action=accept chain=input connection-state=established,related,untracked comment="Accept Established/Related Input"\n`;
-    script += `add action=drop chain=input connection-state=invalid comment="Drop Invalid Input Packets"\n`;
+    inputPreDropRules.push(
+      `add action=accept chain=input connection-state=established,related,untracked comment="Accept Established/Related Input"`,
+      `add action=drop chain=input connection-state=invalid comment="Drop Invalid Input Packets"`
+    );
   }
-
+  if (useRadius || config.enableFirewallHardening || config.blockWanManagement) {
+    inputPreDropRules.push(
+      `add action=accept chain=input src-address=127.0.0.1 dst-address=127.0.0.1 comment="Allow Localhost Loopback (RADIUS & CoA)"`
+    );
+  }
   if (useRadius && radServerIpSafe !== "127.0.0.1" && (config.enableFirewallHardening || config.blockWanManagement)) {
-    script += `add action=accept chain=input protocol=udp src-address=${radServerIpSafe} dst-port=${coaPortSafe} comment="Allow Incoming RADIUS CoA"\n`;
+    inputPreDropRules.push(
+      `add action=accept chain=input protocol=udp src-address=${radServerIpSafe} dst-port=${coaPortSafe} comment="Allow Incoming RADIUS CoA"`
+    );
+  }
+  if (config.blockHotspotRouterAccess) {
+    inputPreDropRules.push(
+      `add action=drop chain=input dst-port=21,22,23,2000,8291,8728,8729 protocol=tcp hotspot=from-client comment="Block Hotspot Clients from Router Management Ports"`,
+      `add action=drop chain=input dst-port=80,443 protocol=tcp dst-address-list=!HOTSPOT_GW_IPS hotspot=from-client comment="Block Hotspot Clients from WebFig on Non-Portal IPs"`
+    );
   }
 
-  if (config.blockHotspotRouterAccess) {
-    script += `add action=drop chain=input dst-port=21,22,23,2000,8291,8728,8729 protocol=tcp hotspot=from-client comment="Block Hotspot Clients from Router Management Ports"\n`;
-    script += `add action=drop chain=input dst-port=80,443 protocol=tcp dst-address-list=!HOTSPOT_GW_IPS hotspot=from-client comment="Block Hotspot Clients from WebFig on Non-Portal IPs"\n`;
-  }
+  const lanInputMatcher = hasVlans ? `in-interface-list=HOTSPOT_LAN` : `in-interface=${effectiveLan}`;
+  inputPreDropRules.push(
+    `add action=accept chain=input protocol=udp dst-port=53,67 ${lanInputMatcher} comment="Allow Hotspot LAN/VLAN DNS & DHCP"`,
+    `add action=accept chain=input protocol=tcp dst-port=53 ${lanInputMatcher} comment="Allow Hotspot LAN/VLAN DNS TCP"`,
+    `add action=accept chain=input protocol=tcp dst-port=80,443,64872-64875 dst-address-list=HOTSPOT_GW_IPS ${lanInputMatcher} comment="Allow Hotspot Captive Portal HTTP/HTTPS"`
+  );
 
   if (config.enableFirewallHardening) {
-    script += `# Block WAN DNS requests to avoid becoming an open resolver\n`;
-    script += `add action=drop chain=input dst-port=53 in-interface-list=WAN_LIST protocol=udp comment="Drop WAN DNS UDP"\n`;
-    script += `add action=drop chain=input dst-port=53 in-interface-list=WAN_LIST protocol=tcp comment="Drop WAN DNS TCP"\n`;
-
-    script += `# Protect Router SSH brute-force prevention (drop blacklist BEFORE staging)\n`;
-    script += `add action=drop chain=input dst-port=22 protocol=tcp src-address-list=ssh_black_list comment="Drop SSH Brute Force Blacklist"\n`;
-    script += `add action=add-src-to-address-list address-list=ssh_black_list address-list-timeout=1d chain=input dst-port=22 protocol=tcp connection-state=new src-address-list=ssh_stage2 comment="SSH Brute Force Blacklist"\n`;
-    script += `add action=add-src-to-address-list address-list=ssh_stage2 address-list-timeout=1m chain=input dst-port=22 protocol=tcp connection-state=new src-address-list=ssh_stage1\n`;
-    script += `add action=add-src-to-address-list address-list=ssh_stage1 address-list-timeout=1m chain=input dst-port=22 protocol=tcp connection-state=new\n`;
+    inputPreDropRules.push(
+      `add action=drop chain=input dst-port=53 in-interface-list=WAN_LIST protocol=udp comment="Drop WAN DNS UDP"`,
+      `add action=drop chain=input dst-port=53 in-interface-list=WAN_LIST protocol=tcp comment="Drop WAN DNS TCP"`,
+      `add action=drop chain=input dst-port=22 protocol=tcp src-address-list=ssh_black_list comment="Drop SSH Brute Force Blacklist"`,
+      `add action=add-src-to-address-list address-list=ssh_black_list address-list-timeout=1d chain=input dst-port=22 protocol=tcp connection-state=new src-address-list=ssh_stage2 comment="SSH Brute Force Blacklist"`,
+      `add action=add-src-to-address-list address-list=ssh_stage2 address-list-timeout=1m chain=input dst-port=22 protocol=tcp connection-state=new src-address-list=ssh_stage1 comment="SSH Brute Force Stage 2"`,
+      `add action=add-src-to-address-list address-list=ssh_stage1 address-list-timeout=1m chain=input dst-port=22 protocol=tcp connection-state=new comment="SSH Brute Force Stage 1"`
+    );
   }
+
+  script += `:local inDrop ([/ip firewall filter find where chain="input" and !dynamic and action="drop"]->0);\n`;
+  script += `:if ([:typeof $inDrop] = "id") do={\n`;
+  inputPreDropRules.forEach((rule) => {
+    script += `  ${rule} place-before=$inDrop\n`;
+  });
+  script += `} else={\n`;
+  inputPreDropRules.forEach((rule) => {
+    script += `  ${rule}\n`;
+  });
+  script += `}\n`;
 
   if (config.blockWanManagement) {
     script += `add action=drop chain=input in-interface-list=WAN_LIST comment="Drop All Unsolicited Input from WAN (Protects Winbox/WebFig/SSH)"\n`;
@@ -118,6 +150,7 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
     script += `set api-ssl disabled=yes\n\n`;
   }
 
+  script += `/ip firewall mangle remove [ find where !dynamic and comment~"^Anti-Sharing: Force TTL=1" ]\n`;
   if (config.preventSharingTtl) {
     script += `# Anti-Sharing: Force TTL=1 to prevent client router/hotspot sharing\n`;
     script += `/ip firewall mangle\n`;
