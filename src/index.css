@@ -8,6 +8,7 @@
 @layer base {
   html {
     color-scheme: dark;
+    scroll-padding-top: 76px;
   }
 
   body {
@@ -18,9 +19,9 @@
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
-  @media (min-width: 768px) {
+  @media (min-width: 640px) and (max-width: 1023px) {
     html {
-      scroll-padding-top: 96px;
+      scroll-padding-top: 116px;
     }
   }
 

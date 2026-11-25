@@ -127,7 +127,7 @@ const ScriptViewer = memo(function ScriptViewer({
     <section
       id="script-viewer-panel"
       aria-label={isAr ? "معاينة السكربت المولد" : "Generated RouterOS Script"}
-      className="lg:col-span-6 flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden h-[520px] sm:h-[600px] lg:h-[calc(100dvh-6.5rem)] lg:sticky lg:top-20"
+      className="lg:col-span-6 flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden h-[520px] sm:h-[600px] lg:h-[calc(100dvh-5.5rem)] lg:sticky lg:top-[4.5rem]"
     >
       {/* Editor Header */}
       <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3 flex justify-between items-center flex-wrap gap-2">

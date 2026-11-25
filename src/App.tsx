@@ -86,6 +86,7 @@ export default function App() {
   const [mobileBundleConfirm, setMobileBundleConfirm] = useState<boolean>(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   const isAr = lang === "ar";
 
@@ -109,17 +110,30 @@ export default function App() {
     };
   }, [exportMenuOpen]);
 
-  const requestTabChange = (nextTab: number) => {
+  const applyTabChange = (nextTab: number, skipScrollTop = false) => {
+    setActiveTab(nextTab);
+    if (!skipScrollTop && mainRef.current) {
+      const top = mainRef.current.getBoundingClientRect().top;
+      if (top < 64) {
+        window.scrollTo({
+          top: Math.max(0, window.scrollY + top - 64),
+          behavior: "smooth",
+        });
+      }
+    }
+  };
+
+  const requestTabChange = (nextTab: number, options?: { skipScrollTop?: boolean }) => {
     if (nextTab === activeTab) return;
     if (hasUnsavedDraft) {
       setPendingTab(nextTab);
       return;
     }
-    setActiveTab(nextTab);
+    applyTabChange(nextTab, Boolean(options?.skipScrollTop));
   };
 
   const focusValidationField = (tab: number, field?: string) => {
-    requestTabChange(tab);
+    requestTabChange(tab, { skipScrollTop: Boolean(field) });
     if (!field || hasUnsavedDraft) return;
     window.setTimeout(() => {
       const panel = document.getElementById(`tab-panel-${tab}`);
@@ -339,8 +353,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans" dir={isAr ? "rtl" : "ltr"}>
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/95 px-4 py-3 md:px-6 md:py-3.5 md:sticky md:top-0 z-40">
+      {/* Header (scrolls away cleanly so sticky tabs keep maximum workspace) */}
+      <header className="relative z-40 border-b border-slate-800 bg-slate-900/95 px-4 py-3 md:px-6 md:py-3.5">
         <div className="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-emerald-950 border border-emerald-700 rounded-xl text-emerald-400 flex-shrink-0">
@@ -484,101 +498,82 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content Dashboard */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 pb-24 md:p-6 md:pb-24 lg:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Notices (storage warning or import feedback) */}
-        {(storageWarning || importNotice) && (
-          <div className="lg:col-span-12 space-y-2">
-            {storageWarning && (
-              <div role="status" className="bg-amber-950/60 border border-amber-700 text-amber-200 text-xs rounded-xl px-4 py-2.5 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0" aria-hidden="true" />
-                <span>{storageWarning}</span>
-              </div>
-            )}
-            {importNotice && (
-              <div
-                role="status"
-                className={`text-xs rounded-xl px-4 py-2.5 border ${
-                  importNotice.kind === "ok"
-                    ? "bg-emerald-950/70 border-emerald-700 text-emerald-200"
-                    : "bg-red-950/70 border-red-700 text-red-200"
-                }`}
-              >
-                {importNotice.text}
-              </div>
-            )}
+      {/* Architecture & Mode Quick Bar (scrolls naturally above the sticky tabs) */}
+      <div className="max-w-7xl w-full mx-auto px-4 pt-4 pb-2 md:px-6 md:pt-5">
+        <div className="bg-slate-900/70 border border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
+              <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+              <span>{isAr ? "نمط الإدارة:" : "Mode:"}</span>
+            </span>
+            <div
+              role="group"
+              aria-label={isAr ? "نمط الإدارة" : "Auth Mode"}
+              className="inline-flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-700"
+            >
+              {authModeOptions.map((opt) => {
+                const selected = effectiveAuthMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => handleConfigChange({ authMode: opt.id })}
+                    className={`min-h-[44px] sm:min-h-[34px] px-2.5 py-1 rounded-lg text-xs transition ${
+                      selected
+                        ? "bg-emerald-500 text-slate-950 font-bold"
+                        : "text-slate-300 hover:text-white hover:bg-slate-800/70 font-medium"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
 
-        {/* Architecture & Mode Quick Bar + Zero-Clip Navigation Bar */}
-        <div className="lg:col-span-12 space-y-3">
-          <div className="bg-slate-900/70 border border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
-                <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
-                <span>{isAr ? "نمط الإدارة:" : "Mode:"}</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span className="text-slate-400">WAN:</span>
+              <span className={`font-mono font-semibold ${config.loadBalancingMethod !== "none" ? "text-emerald-400" : "text-slate-300"}`}>
+                {config.loadBalancingMethod !== "none"
+                  ? `Multi-WAN (${config.loadBalancingMethod.toUpperCase()})`
+                  : (isAr ? "خط واحد" : "Single WAN")}
               </span>
-              <div
-                role="group"
-                aria-label={isAr ? "نمط الإدارة" : "Auth Mode"}
-                className="inline-flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-700"
-              >
-                {authModeOptions.map((opt) => {
-                  const selected = effectiveAuthMode === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => handleConfigChange({ authMode: opt.id })}
-                      className={`min-h-[44px] sm:min-h-[34px] px-2.5 py-1 rounded-lg text-xs transition ${
-                        selected
-                          ? "bg-emerald-500 text-slate-950 font-bold"
-                          : "text-slate-300 hover:text-white hover:bg-slate-800/70 font-medium"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                <span className="text-slate-400">WAN:</span>
-                <span className={`font-mono font-semibold ${config.loadBalancingMethod !== "none" ? "text-emerald-400" : "text-slate-300"}`}>
-                  {config.loadBalancingMethod !== "none"
-                    ? `Multi-WAN (${config.loadBalancingMethod.toUpperCase()})`
-                    : (isAr ? "خط واحد" : "Single WAN")}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                <span className="text-slate-400">VLANs:</span>
-                <span dir={config.enableVlans ? "ltr" : undefined} className={`font-mono font-semibold ${config.enableVlans ? "text-emerald-400" : "text-slate-400"}`}>
-                  {config.enableVlans ? `${config.vlans?.length || 0}` : (isAr ? "معطّل" : "Off")}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                <span className="text-slate-400">{isAr ? "الباقات:" : "Plans:"}</span>
-                <span dir="ltr" className="font-mono font-semibold text-slate-200 inline-block">
-                  {effectiveAuthMode === "hotspot_only"
-                    ? `${hotspotProfiles.length} HS`
-                    : isExternalRadius
-                      ? (effectiveAuthMode === "hybrid" ? `${hotspotProfiles.length} HS / Ext RADIUS` : "External RADIUS")
-                      : effectiveAuthMode === "userman_radius"
-                        ? `${config.umProfiles?.length || 0} UM`
-                        : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span className="text-slate-400">VLANs:</span>
+              <span dir={config.enableVlans ? "ltr" : undefined} className={`font-mono font-semibold ${config.enableVlans ? "text-emerald-400" : "text-slate-400"}`}>
+                {config.enableVlans ? `${config.vlans?.length || 0}` : (isAr ? "معطّل" : "Off")}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Gauge className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span className="text-slate-400">{isAr ? "الباقات:" : "Plans:"}</span>
+              <span dir="ltr" className="font-mono font-semibold text-slate-200 inline-block">
+                {effectiveAuthMode === "hotspot_only"
+                  ? `${hotspotProfiles.length} HS`
+                  : isExternalRadius
+                    ? (effectiveAuthMode === "hybrid" ? `${hotspotProfiles.length} HS / Ext RADIUS` : "External RADIUS")
+                    : effectiveAuthMode === "userman_radius"
+                      ? `${config.umProfiles?.length || 0} UM`
+                      : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
+              </span>
             </div>
           </div>
+        </div>
+      </div>
 
+      {/* Slim Sticky Navigation Bar (always visible while scrolling forms) */}
+      <nav
+        aria-label={isAr ? "أقسام الإعداد" : "Configuration navigation"}
+        className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-sm border-b border-slate-800/90 px-4 py-2 md:px-6"
+      >
+        <div className="max-w-7xl mx-auto">
           {/* Mobile Tab Selector */}
-          <div className="sm:hidden bg-slate-900/70 border border-slate-800 rounded-2xl p-2.5">
+          <div className="sm:hidden">
             <label htmlFor="mobile-tab-select" className="sr-only">
               {isAr ? "اختيار قسم الإعدادات" : "Select configuration section"}
             </label>
@@ -587,7 +582,7 @@ export default function App() {
               name="mobileTabSelect"
               value={activeTab}
               onChange={(e) => requestTabChange(parseInt(e.target.value, 10))}
-              className="w-full min-h-[44px] bg-slate-950 border border-slate-600 text-slate-100 rounded-xl px-3 py-2 text-sm font-medium"
+              className="w-full min-h-[44px] bg-slate-900 border border-slate-600 text-slate-100 rounded-xl px-3 py-2 text-sm font-medium"
             >
               {tabs.map((tab) => {
                 const tabErrors = validationIssues.filter((i) => i.tab === tab.id && i.severity === "error").length;
@@ -620,7 +615,7 @@ export default function App() {
                 isAr
               )
             }
-            className="hidden sm:grid sm:grid-cols-4 lg:grid-cols-8 gap-1.5 bg-slate-900/60 border border-slate-800 p-1.5 rounded-2xl"
+            className="hidden sm:grid sm:grid-cols-4 lg:grid-cols-8 gap-1 bg-slate-900/80 border border-slate-800 p-1 rounded-xl"
           >
             {tabs.map((tab) => {
               const TabIcon = tab.icon;
@@ -639,7 +634,7 @@ export default function App() {
                   title={tab.label}
                   onClick={() => requestTabChange(tab.id)}
                   type="button"
-                  className={`relative min-h-[44px] flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs font-medium rounded-xl whitespace-nowrap transition-all duration-150 ${
+                  className={`relative min-h-[40px] flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all duration-150 ${
                     isActive
                       ? "bg-emerald-950 border border-emerald-700 text-emerald-300 shadow-sm"
                       : "text-slate-300 hover:text-white hover:bg-slate-800/70"
@@ -669,6 +664,33 @@ export default function App() {
             })}
           </div>
         </div>
+      </nav>
+
+      {/* Main Content Dashboard */}
+      <main ref={mainRef} className="flex-1 max-w-7xl w-full mx-auto p-4 pb-24 md:p-6 md:pb-24 lg:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Notices (storage warning or import feedback) */}
+        {(storageWarning || importNotice) && (
+          <div className="lg:col-span-12 space-y-2">
+            {storageWarning && (
+              <div role="status" className="bg-amber-950/60 border border-amber-700 text-amber-200 text-xs rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0" aria-hidden="true" />
+                <span>{storageWarning}</span>
+              </div>
+            )}
+            {importNotice && (
+              <div
+                role="status"
+                className={`text-xs rounded-xl px-4 py-2.5 border ${
+                  importNotice.kind === "ok"
+                    ? "bg-emerald-950/70 border-emerald-700 text-emerald-200"
+                    : "bg-red-950/70 border-red-700 text-red-200"
+                }`}
+              >
+                {importNotice.text}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Full-Width Live Validation Banner */}
         {validationIssues.length > 0 && (
@@ -903,7 +925,7 @@ export default function App() {
           const target = pendingTab;
           setPendingTab(null);
           setHasUnsavedDraft(false);
-          if (target !== null) setActiveTab(target);
+          if (target !== null) applyTabChange(target);
         }}
         onCancel={() => setPendingTab(null)}
       />
