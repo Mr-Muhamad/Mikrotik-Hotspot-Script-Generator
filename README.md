@@ -90,8 +90,8 @@
 
 ```bash
 # 1. استنساخ المستودع (Clone the repository)
-git clone <YOUR_GITHUB_REPO_URL>
-cd <YOUR_REPO_FOLDER>
+git clone https://github.com/Mr-Muhamad/Mikrotik-Hotspot-Script-Generator.git
+cd Mikrotik-Hotspot-Script-Generator
 
 # 2. تثبيت الحزم والمكتبات
 npm install
