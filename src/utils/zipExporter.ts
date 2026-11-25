@@ -145,15 +145,14 @@ export function createZipBlob(entries: ZipEntry[]): Blob {
 }
 
 /**
- * Returns a deep-cloned configuration with sensitive secrets and generated
- * voucher codes removed so the JSON backup can be safely shared.
+ * Returns a deep-cloned configuration with sensitive credentials removed
+ * so the JSON backup can be safely shared.
  */
 export function stripConfigSecrets(config: HotspotConfig): HotspotConfig {
   const cloned = structuredClone(config);
   cloned.singleWanPppoePass = "";
   cloned.radiusSecret = "";
   cloned.usermanAdminPass = "";
-  cloned.voucherCodes = undefined;
   cloned.wanLines = (cloned.wanLines || []).map((l) => ({
     ...l,
     pppoePass: "",

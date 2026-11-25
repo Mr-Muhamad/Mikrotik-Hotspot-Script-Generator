@@ -271,17 +271,4 @@ export interface HotspotConfig {
   enableDnsCache: boolean;
   queueType: "simple" | "cake" | "fq_codel";
   parentQueueMaxLimit: string;
-
-  // Voucher Batch Generator Options
-  generateVouchersBatch: boolean;
-  voucherTarget: "auto" | "hotspot" | "userman";
-  voucherCount: number;
-  voucherPrefix: string;
-  voucherLength: number;
-  voucherCodes?: string[];
-  voucherSelectedProfile: string;
-  voucherLocalLimitUptime: string;
-  voucherLocalLimitBytesMb: number;
-  voucherUmGroup: string;
-  voucherSharedUsers: number;
 }

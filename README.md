@@ -5,7 +5,7 @@
 
 **أداة ويب متكاملة لتوليد سكربتات إعداد شبكات MikroTik Hotspot ودمج الخطوط (Multi-WAN) والشبكات الافتراضية (VLANs) وإعدادات User Manager v6/v7 المستقلة، مع تصدير حزمة نشر كاملة (`.rsc` + حزمة بوابة الدخول ذات الـ 5 ملفات) بصيغة ZIP بضغطة زر.**
 
-*A comprehensive client-side web utility to generate production-ready MikroTik RouterOS v6 & v7 Hotspot scripts, Multi-WAN Load Balancing, Bridge VLAN Filtering, separated Hotspot User Profiles vs User Manager v6/v7 Studio, printable voucher cards/CSV, secret-free shareable JSON export, and a 5-file captive portal ZIP deployment bundle.*
+*A comprehensive client-side web utility to generate production-ready MikroTik RouterOS v6 & v7 Hotspot scripts, Multi-WAN Load Balancing, Bridge VLAN Filtering, separated Hotspot User Profiles vs User Manager v6/v7 Studio, secret-free shareable JSON export, and a 5-file captive portal ZIP deployment bundle.*
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -55,9 +55,9 @@
 | **3. دمج الخطوط (Multi-WAN Load Balancing)** | دعم **PCC** و**NTH** و**ECMP** و**Failover**، قائمة `LOCAL_SUBNETS` + `hotspot=!auth` لحماية صفحة الدخول والمودمات، ربط البوابة بالمنفذ (`IP%interface`)، وفحص الإنترنت الحقيقي **Recursive Failover**. |
 | **4. بروفايلات الهوتسبوت (Hotspot Profiles)** | محول أنماط التشغيل، إعدادات بوابة NAS وبروفايل التجربة `trial-profile`، وبروفايلات `/ip hotspot user profile` بـ `RX/TX` و`min-rx/min-tx` وBurst و`mac-cookie-timeout` و`insert-queue-before` وقالب **`on-login`** للانتهاء التلقائي محلياً. |
 | **5. اليوزر مانجر وراديوس (User Manager Studio)** | مقسّم إلى 3 أقسام: **(1) الربط والخادم**: RADIUS + CoA (`3799`)، وحساب `customer` لـ v6 ومجموعات `user group` مع `outer-auths` و`attributes` لـ v7؛ **(2) القيود والكوتا**: `Limitations` مع `transfer/download/upload` وتجديد العدادات `reset-counters-interval` لـ v7؛ **(3) الباقات والجدولة**: ربط الباقة بعدة قيود زمنية (قالب سرعة نهار/ليل). |
-| **6. الحماية والتخصيص والكروت (Security & Vouchers)** | تجاوز **FastTrack**، تأمين الجدار الناري وحظر إدارة الراوتر من WAN والعملاء، تعطيل الخدمات غير الآمنة، منع مشاركة الكروت (`TTL=1`)، قائمة **Walled Garden** (HTTP وHTTPS IP)، استثناءات `IP Bindings`، طوابير `CAKE`/`FQ-CoDel` في v7، ومولّد الكروت بالجملة مع **طباعة بطاقات الكروت (Printable Voucher Cards)** و**تصدير CSV**. |
+| **6. الحماية والتخصيص المتقدم (Security & Advanced)** | تجاوز **FastTrack**، تأمين الجدار الناري وحظر إدارة الراوتر من WAN والعملاء، تعطيل الخدمات غير الآمنة، منع مشاركة الكروت (`TTL=1`)، قائمة **Walled Garden** (HTTP وHTTPS IP)، استثناءات `IP Bindings`، طوابير `CAKE`/`FQ-CoDel` في v7، وتنظيف الذاكرة/إعادة التشغيل المجدولة. |
 | **7. حزمة بوابة الدخول الكاملة (5-File Captive Portal Suite)** | معاينة حية تفاعلية خالية من وسوم السكربت الخام، 4 ثيمات ألوان، دعم التابين (كارت / مستخدم وكلمة سر)، وتوليد حزمة البوابة المتكاملة من 5 ملفات (`login.html`, `status.html`, `logout.html`, `alogin.html`, `md5.js`) متوافقة مع تشفير CHAP في RouterOS. |
-| **8. محرر السكربت والتصدير الآمن وحزمة ZIP** | بحث فوري، انتقال سريع للأقسام، تبديل التفاف الأسطر، نسخ السكربت، تحميل `.rsc`، **تصدير JSON خالٍ من الأسرار (Secret-Free Shareable JSON)** عبر `stripConfigSecrets` (يزيل كلمات مرور PPPoE وسر RADIUS وكلمة مرور مسؤول User Manager وأكواد الكروت)، وتحميل **حزمة ZIP كاملة** تضم السكربت + مجلد البوابة ذي الـ 5 ملفات + دليل التركيب `README_DEPLOY.txt` (ترتيب التركيب: استيراد `.rsc` أولا ثم رفع مجلد البوابة). |
+| **8. محرر السكربت والتصدير الآمن وحزمة ZIP** | بحث فوري، انتقال سريع للأقسام، تبديل التفاف الأسطر، نسخ السكربت، تحميل `.rsc`، **تصدير JSON خالٍ من الأسرار (Secret-Free Shareable JSON)** عبر `stripConfigSecrets` (يزيل كلمات مرور PPPoE وسر RADIUS وكلمة مرور مسؤول User Manager)، وتحميل **حزمة ZIP كاملة** تضم السكربت + مجلد البوابة ذي الـ 5 ملفات + دليل التركيب `README_DEPLOY.txt` (ترتيب التركيب: استيراد `.rsc` أولا ثم رفع مجلد البوابة). |
 
 ---
 
@@ -65,7 +65,7 @@
 
 تم تنظيم منطق توليد السكربتات بشكل معياري داخل `src/utils/generators/` لفصل المسؤوليات وتسهيل الاختبار والصيانة، إلى جانب الأدوات الأساسية:
 
-- `src/utils/generators/`: وحدات توليد مقاطع RouterOS المعيارية (الشبكة والواجهات، الشبكات الافتراضية VLANs، تعدد الخطوط Multi-WAN، الجدار الناري والحماية، بروفايلات الهوتسبوت وUser Manager، والكروت).
+- `src/utils/generators/`: وحدات توليد مقاطع RouterOS المعيارية (الشبكة والواجهات، الشبكات الافتراضية VLANs، تعدد الخطوط Multi-WAN، الجدار الناري والحماية، بروفايلات الهوتسبوت وUser Manager، وجدولة الصيانة).
 - `src/utils/scriptGenerator.ts`: المنسّق الرئيسي لتجميع سكربت `.rsc` الكامل ودوال الحسابات الشبكية والسرعات.
 - `src/utils/htmlTemplateGenerator.ts`: مولّد حزمة بوابة الدخول ذات الـ 5 ملفات (`login.html`, `status.html`, `logout.html`, `alogin.html`, `md5.js`).
 - `src/utils/zipExporter.ts`: مولّد أرشيف ZIP نقي (`createZipBytes` / `createZipBlob`)، دالة إزالة الأسرار (`stripConfigSecrets`)، وباني دليل النشر ثنائي اللغة (`buildDeploymentReadme`).
@@ -129,7 +129,7 @@ npm run build
 
 ### Overview
 
-**MikroTik Hotspot Master Script Generator** is a fast, 100% client-side React + TypeScript application that generates production-ready **RouterOS v6 & v7** deployment scripts with zero backend dependencies. Settings auto-save to `localStorage` with schema migration, JSON backup Export/Import (including **Secret-Free Shareable JSON** export), live validation, printable voucher cards and CSV export, and a zero-dependency **ZIP deployment bundle** containing your `.rsc` script, the **5-file Captive Portal suite**, and a bilingual deployment guide.
+**MikroTik Hotspot Master Script Generator** is a fast, 100% client-side React + TypeScript application that generates production-ready **RouterOS v6 & v7** deployment scripts with zero backend dependencies. Settings auto-save to `localStorage` with schema migration, JSON backup Export/Import (including **Secret-Free Shareable JSON** export), live validation, and a zero-dependency **ZIP deployment bundle** containing your `.rsc` script, the **5-file Captive Portal suite**, and a bilingual deployment guide.
 
 ---
 
@@ -152,9 +152,9 @@ npm run build
 | **3. Multi-WAN Load Balancing** | **PCC**, **NTH**, **ECMP**, and **Failover** (`DHCP`, `Static CIDR`, `PPPoE`), `LOCAL_SUBNETS` + `hotspot=!auth` mangle protection, interface-scoped gateways (`IP%interface`), and **Recursive Failover**. |
 | **4. Hotspot User Profiles** | Subscriber mode selector, NAS `default` + `trial-profile` config, and `/ip hotspot user profile` builder (`RX/TX`, `min-rx/min-tx`, Burst, `status-autorefresh`, `add-mac-cookie`, `address-pool`, `address-list`, `insert-queue-before`, plus optional `on-login` expiry scheduler). |
 | **5. User Manager Studio (v6 & v7)** | Three focused sub-tabs: **(1) RADIUS & Server** (CoA `3799`, v6 `customer`, v7 `user group` with `outer-auths` & RADIUS `attributes`), **(2) Limitations** (`rate-limit-rx/tx`, `transfer`/`download`/`upload` limits, v7 `reset-counters-interval`, one-click clone from Hotspot speeds), and **(3) Profiles & Schedules** (time-windowed `profile-limitation` + Day/Night Boost preset). |
-| **6. Security & Batch Vouchers** | Safe **FastTrack bypass**, Firewall hardening, `TTL=1` anti-sharing, **Walled Garden** (HTTP + HTTPS IP), `IP Bindings`, v7 `CAKE`/`FQ-CoDel` queues, nightly maintenance scripts, mode-aware Batch Voucher Generator, **Printable Voucher Cards**, and **CSV export**. |
+| **6. Security, Queues & Maintenance** | Safe **FastTrack bypass**, Firewall hardening, `TTL=1` anti-sharing, **Walled Garden** (HTTP + HTTPS IP), `IP Bindings`, v7 `CAKE`/`FQ-CoDel` queues, and nightly maintenance schedulers. |
 | **7. 5-File Captive Portal Suite** | Interactive captive portal builder with clean live iframe preview, 4 themes, Voucher + Username/Password tabs, and full 5-file RouterOS portal suite (`login.html`, `status.html`, `logout.html`, `alogin.html`, `md5.js`) for CHAP authentication and session status/logout flows. |
-| **8. Live Script Viewer, Secret-Free JSON & ZIP Bundle** | Search with match count, section jump, line-wrap toggle, copy script, `.rsc` download, **Secret-Free Shareable JSON** export (`stripConfigSecrets` strips PPPoE passwords, RADIUS secret, User Manager admin password, and voucher codes), and one-click **ZIP Deployment Bundle** export (`hotspot/` or `flash/hotspot/` portal files + `.rsc` + `README_DEPLOY.txt` instructing to import `.rsc` first, then upload the 5-file portal folder). |
+| **8. Live Script Viewer, Secret-Free JSON & ZIP Bundle** | Search with match count, section jump, line-wrap toggle, copy script, `.rsc` download, **Secret-Free Shareable JSON** export (`stripConfigSecrets` strips PPPoE passwords, RADIUS secret, and User Manager admin password), and one-click **ZIP Deployment Bundle** export (`hotspot/` or `flash/hotspot/` portal files + `.rsc` + `README_DEPLOY.txt` instructing to import `.rsc` first, then upload the 5-file portal folder). |
 
 ---
 
@@ -162,7 +162,7 @@ npm run build
 
 The RouterOS generation pipeline is organized modularly under `src/utils/generators/` alongside core utilities:
 
-- `src/utils/generators/`: Modular RouterOS script section generators (interfaces/LAN/VLANs, Multi-WAN load balancing, firewall/security, Hotspot profiles, User Manager v6/v7, and batch vouchers).
+- `src/utils/generators/`: Modular RouterOS script section generators (interfaces/LAN/VLANs, Multi-WAN load balancing, firewall/security, Hotspot profiles, User Manager v6/v7, and maintenance schedulers).
 - `src/utils/scriptGenerator.ts`: Main `.rsc` script orchestrator plus IPv4/CIDR and RouterOS rate helpers.
 - `src/utils/htmlTemplateGenerator.ts`: Generates the 5-file captive portal suite (`login.html`, `status.html`, `logout.html`, `alogin.html`, `md5.js`).
 - `src/utils/zipExporter.ts`: Zero-dependency ZIP archive writer (`createZipBytes`, `createZipBlob`), `stripConfigSecrets` for safe JSON sharing, and bilingual `buildDeploymentReadme`.

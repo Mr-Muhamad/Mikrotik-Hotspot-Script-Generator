@@ -9,7 +9,7 @@ import { generateSystemAndInterfacesSection } from "./generators/systemAndInterf
 import { generateVlansAndMultiWanSection } from "./generators/vlansAndMultiWan.ts";
 import { generateHotspotAndQueuesSection } from "./generators/hotspotAndQueues.ts";
 import { generateFirewallAndSecuritySection } from "./generators/firewallAndSecurity.ts";
-import { generateUserManagerAndVouchersSection } from "./generators/userManagerAndVouchers.ts";
+import { generateUserManagerAndMaintenanceSection } from "./generators/userManagerAndMaintenance.ts";
 
 export {
   escapeRosString,
@@ -36,7 +36,7 @@ export {
 
 /**
  * Generates a complete, idempotent MikroTik RouterOS (v6 or v7) Hotspot, Multi-WAN,
- * VLAN, Queue, Firewall, User Manager, and Batch Voucher configuration script.
+ * VLAN, Queue, Firewall, User Manager, and Maintenance configuration script.
  */
 export function generateMikrotikScript(
   config: HotspotConfig,
@@ -48,6 +48,6 @@ export function generateMikrotikScript(
     generateVlansAndMultiWanSection(ctx),
     generateHotspotAndQueuesSection(ctx),
     generateFirewallAndSecuritySection(ctx),
-    generateUserManagerAndVouchersSection(ctx),
+    generateUserManagerAndMaintenanceSection(ctx),
   ].join("");
 }

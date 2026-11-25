@@ -91,28 +91,17 @@ export default function UmProfilesSubTab({ config, onChange, lang, onDirtyChange
 
   const saveProfile = () => {
     if (!tempProf) return;
-    const oldName = umProfiles.find((p) => p.id === tempProf.id)?.name;
-    const updates: Partial<HotspotConfig> = {
+    onChange({
       umProfiles: umProfiles.map((p) => (p.id === tempProf.id ? tempProf : p)),
-    };
-    if (oldName && oldName !== tempProf.name && config.voucherSelectedProfile === oldName) {
-      updates.voucherSelectedProfile = tempProf.name;
-    }
-    onChange(updates);
+    });
     setEditingProfId(null);
     setTempProf(null);
   };
 
   const deleteProfile = (id: string) => {
-    const deletedProf = umProfiles.find((p) => p.id === id);
-    const remaining = umProfiles.filter((p) => p.id !== id);
-    const updates: Partial<HotspotConfig> = {
-      umProfiles: remaining,
-    };
-    if (deletedProf && config.voucherSelectedProfile === deletedProf.name) {
-      updates.voucherSelectedProfile = remaining[0]?.name || "";
-    }
-    onChange(updates);
+    onChange({
+      umProfiles: umProfiles.filter((p) => p.id !== id),
+    });
     if (editingProfId === id) {
       setEditingProfId(null);
       setTempProf(null);

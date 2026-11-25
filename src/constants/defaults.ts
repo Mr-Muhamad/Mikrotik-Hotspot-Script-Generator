@@ -21,37 +21,6 @@ import type {
 
 export const CONFIG_SCHEMA_VERSION = 3;
 
-const VOUCHER_CHARSET = "0123456789abcdefghijklmnopqrstuvwxyz";
-
-/**
- * Generates unique cryptographically random alphanumeric voucher suffixes
- * using rejection sampling (byte < 252 = 36 * 7) to avoid modulo bias.
- */
-export function generateCryptoVoucherCodes(count: number, length: number): string[] {
-  const clampedLen = Math.max(1, Math.min(32, Math.floor(length || 4)));
-  const targetCount = Math.max(0, Math.min(500, Math.floor(count || 0)));
-  const maxUnique = Math.pow(VOUCHER_CHARSET.length, clampedLen);
-  const safeLimit = Math.min(targetCount, maxUnique);
-  const results = new Set<string>();
-  const batchBytes = new Uint8Array(Math.max(32, clampedLen * 2));
-
-  while (results.size < safeLimit) {
-    let code = "";
-    while (code.length < clampedLen) {
-      globalThis.crypto.getRandomValues(batchBytes);
-      for (let i = 0; i < batchBytes.length && code.length < clampedLen; i++) {
-        const b = batchBytes[i];
-        if (b < 252) {
-          code += VOUCHER_CHARSET[b % VOUCHER_CHARSET.length];
-        }
-      }
-    }
-    results.add(code);
-  }
-
-  return Array.from(results);
-}
-
 export const ALL_UM_WEEKDAYS: UmWeekday[] = [
   "sunday",
   "monday",
@@ -463,18 +432,6 @@ export const DEFAULT_CONFIG: HotspotConfig = {
   enableDnsCache: true,
   queueType: "simple",
   parentQueueMaxLimit: "",
-
-  // Voucher Generator Script Options
-  generateVouchersBatch: false,
-  voucherTarget: "auto",
-  voucherCount: 20,
-  voucherPrefix: "CARD-",
-  voucherLength: 4,
-  voucherSelectedProfile: "UM-2M",
-  voucherLocalLimitUptime: "1d",
-  voucherLocalLimitBytesMb: 0,
-  voucherUmGroup: "hotspot-users",
-  voucherSharedUsers: 1,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -661,12 +618,21 @@ export function hydrateConfig(raw: unknown): HotspotConfig {
   merged.umProfiles = hydrateUmProfiles(raw.umProfiles);
   merged.umGroups = hydrateUmGroups(raw.umGroups);
 
-  if (Array.isArray(raw.voucherCodes)) {
-    merged.voucherCodes = raw.voucherCodes
-      .filter((c): c is string => typeof c === "string" && /^[0-9a-z]+$/i.test(c.trim()))
-      .map((c) => c.trim());
-  } else {
-    delete merged.voucherCodes;
+  const legacyVoucherKeys = [
+    "generateVouchersBatch",
+    "voucherTarget",
+    "voucherCount",
+    "voucherPrefix",
+    "voucherLength",
+    "voucherCodes",
+    "voucherSelectedProfile",
+    "voucherLocalLimitUptime",
+    "voucherLocalLimitBytesMb",
+    "voucherUmGroup",
+    "voucherSharedUsers",
+  ];
+  for (const key of legacyVoucherKeys) {
+    delete (merged as unknown as Record<string, unknown>)[key];
   }
 
   if (merged.useLanBridge) {

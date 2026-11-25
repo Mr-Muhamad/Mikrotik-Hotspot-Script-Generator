@@ -186,23 +186,6 @@ export default function App() {
         });
       }
 
-      const nextAuthMode = next.authMode || (next.enableUserManager ? "userman_radius" : "hotspot_only");
-      const nextVoucherTarget =
-        nextAuthMode === "hotspot_only"
-          ? "hotspot"
-          : nextAuthMode === "userman_radius"
-            ? "userman"
-            : (next.voucherTarget === "hotspot" ? "hotspot" : "userman");
-
-      if (nextVoucherTarget === "hotspot") {
-        if (!hotspotProfiles.some((p) => p.name === next.voucherSelectedProfile) && hotspotProfiles[0]) {
-          next.voucherSelectedProfile = hotspotProfiles[0].name;
-        }
-      } else {
-        if (!(next.umProfiles || []).some((p) => p.name === next.voucherSelectedProfile) && next.umProfiles?.[0]) {
-          next.voucherSelectedProfile = next.umProfiles[0].name;
-        }
-      }
       return next;
     });
   };
@@ -212,24 +195,15 @@ export default function App() {
   };
 
   const handleUpdateProfile = (index: number, updatedProf: HotspotUserProfile) => {
-    const oldName = hotspotProfiles[index]?.name;
     setHotspotProfiles((prev) => {
       const next = [...prev];
       next[index] = updatedProf;
       return next;
     });
-    if (oldName && oldName !== updatedProf.name && config.voucherSelectedProfile === oldName) {
-      setConfig((prev) => ({ ...prev, voucherSelectedProfile: updatedProf.name }));
-    }
   };
 
   const handleDeleteProfile = (index: number) => {
-    const deletedName = hotspotProfiles[index]?.name;
-    const remaining = hotspotProfiles.filter((_, i) => i !== index);
-    setHotspotProfiles(remaining);
-    if (deletedName && config.voucherSelectedProfile === deletedName) {
-      setConfig((prev) => ({ ...prev, voucherSelectedProfile: remaining[0]?.name || "" }));
-    }
+    setHotspotProfiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleConfirmExecute = () => {
@@ -423,7 +397,7 @@ export default function App() {
                       {isAr ? "نسخة للمشاركة (بدون كلمات السر)" : "Shareable Template (strip secrets)"}
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      {isAr ? "يحذف أسرار RADIUS وPPPoE والأكواد" : "Removes RADIUS, PPPoE & voucher secrets"}
+                      {isAr ? "يحذف كلمات مرور RADIUS وPPPoE واليوزر مانجر" : "Removes RADIUS, PPPoE & User Manager passwords"}
                     </span>
                   </button>
                 </div>
@@ -723,7 +697,6 @@ export default function App() {
                 {activeTab === 5 && (
                   <AdvancedFeaturesTab
                     config={config}
-                    profiles={hotspotProfiles}
                     onChange={handleConfigChange}
                     lang={lang}
                   />

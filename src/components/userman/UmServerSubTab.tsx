@@ -53,14 +53,9 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
   const saveGroup = () => {
     if (!tempGroup) return;
-    const oldName = umGroups.find((g) => g.id === tempGroup.id)?.name;
-    const updates: Partial<HotspotConfig> = {
+    onChange({
       umGroups: umGroups.map((g) => (g.id === tempGroup.id ? tempGroup : g)),
-    };
-    if (oldName && oldName !== tempGroup.name && config.voucherUmGroup === oldName) {
-      updates.voucherUmGroup = tempGroup.name;
-    }
-    onChange(updates);
+    });
     setEditingGroupId(null);
     setTempGroup(null);
   };

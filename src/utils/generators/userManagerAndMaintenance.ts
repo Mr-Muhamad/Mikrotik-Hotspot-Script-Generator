@@ -4,7 +4,6 @@
  */
 
 import type { UserManagerLimitation } from "../../types";
-import { generateCryptoVoucherCodes } from "../../constants/defaults.ts";
 import type { GeneratorContext } from "./context.ts";
 import {
   clampInt,
@@ -16,14 +15,13 @@ import {
 
 /**
  * Generates Section 9 (RADIUS, Incoming CoA, User Manager v7 & v6),
- * Section 10 (Housekeeping script & Schedulers), Section 11 (CSPRNG Batch Voucher Cards),
+ * Section 10 (Housekeeping script & Schedulers),
  * and the closing footer banner.
  */
-export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): string {
+export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext): string {
   const {
     config,
     isV7,
-    effectiveAuthMode,
     useRadius,
     radServerIpSafe,
     coaPortSafe,
@@ -332,65 +330,6 @@ export function generateUserManagerAndVouchersSection(ctx: GeneratorContext): st
     script += `add name=schedule_weekly_reboot interval=7d start-time=04:00:00 on-event="/system reboot" comment="Weekly router reboot for RAM refresh"\n\n`;
   } else {
     script += `/system scheduler remove [ find name=schedule_weekly_reboot ]\n\n`;
-  }
-
-  // 11. Batch Voucher Cards Generator (CSPRNG-generated in browser; works across all v6 & v7 versions)
-  if (config.generateVouchersBatch && config.voucherCount > 0) {
-    const voucherCount = clampInt(config.voucherCount, 1, 500, 20);
-    const voucherLen = clampInt(config.voucherLength || 4, 3, 32, 4);
-    const safePrefix = sanitizeRosIdentifier(config.voucherPrefix || "", "");
-    const safeTargetProf = escapeRosString(config.voucherSelectedProfile);
-    const safeUmCustomer = escapeRosString(config.usermanAdminUser);
-    const voucherTarget =
-      effectiveAuthMode === "hotspot_only"
-        ? "hotspot"
-        : effectiveAuthMode === "userman_radius"
-          ? "userman"
-          : (config.voucherTarget === "hotspot" ? "hotspot" : "userman");
-
-    const precomputed = (config.voucherCodes || []).filter(
-      (c) => typeof c === "string" && c.length === voucherLen && /^[0-9a-z]+$/i.test(c)
-    );
-    const suffixes =
-      precomputed.length === voucherCount
-        ? precomputed
-        : generateCryptoVoucherCodes(voucherCount, voucherLen);
-
-    const fullCodes = suffixes.map((s) => `${safePrefix}${s}`);
-
-    script += `# ---------------------------------------------------------------------\n`;
-    script += `# 11. Batch Voucher Cards Generator / سكربت توليد الكروت العشوائية بالجملة\n`;
-    script += `# ---------------------------------------------------------------------\n`;
-    script += `# Generates ${fullCodes.length} CSPRNG ${voucherTarget === "userman" ? "User Manager" : "Local Hotspot"} cards (username = password) for profile "${safeTargetProf}"\n`;
-
-    for (let i = 0; i < fullCodes.length; i += 8) {
-      script += `# Codes [${i + 1}-${Math.min(i + 8, fullCodes.length)}]: ${fullCodes.slice(i, i + 8).join(", ")}\n`;
-    }
-
-    const shared = clampInt(config.voucherSharedUsers || 1, 1, 100, 1);
-    const groupAttr = config.voucherUmGroup?.trim()
-      ? ` group="${escapeRosString(config.voucherUmGroup.trim())}"`
-      : "";
-    const limitUptime = config.voucherLocalLimitUptime?.trim() && config.voucherLocalLimitUptime.trim() !== "0s"
-      ? ` limit-uptime=${sanitizeRosIdentifier(config.voucherLocalLimitUptime.trim(), "1d")}`
-      : "";
-    const limitBytes = config.voucherLocalLimitBytesMb && config.voucherLocalLimitBytesMb > 0
-      ? ` limit-bytes-total=${mbToBytes(config.voucherLocalLimitBytesMb)}`
-      : "";
-
-    fullCodes.forEach((rawCode) => {
-      const code = escapeRosString(rawCode);
-      if (voucherTarget === "userman") {
-        if (isV7) {
-          script += `:if ([:len [/user-manager user find name="${code}"]] = 0) do={ /user-manager user add name="${code}" password="${code}"${groupAttr} shared-users=${shared}; :if ([:len [/user-manager profile find name="${safeTargetProf}"]] > 0) do={ /user-manager user-profile add user="${code}" profile="${safeTargetProf}" } }\n`;
-        } else {
-          script += `:if ([:len [/tool user-manager user find username="${code}"]] = 0) do={ /tool user-manager user add username="${code}" password="${code}" customer="${safeUmCustomer}" shared-users=${shared}; :if ([:len [/tool user-manager profile find name="${safeTargetProf}"]] > 0) do={ /tool user-manager user create-and-activate-profile numbers=[find username="${code}"] customer="${safeUmCustomer}" profile="${safeTargetProf}" } }\n`;
-        }
-      } else {
-        script += `:if ([:len [/ip hotspot user find name="${code}"]] = 0) do={ /ip hotspot user add name="${code}" password="${code}" profile="${safeTargetProf}"${limitUptime}${limitBytes} }\n`;
-      }
-    });
-    script += `\n`;
   }
 
   script += `# =====================================================================\n`;

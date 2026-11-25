@@ -805,7 +805,7 @@ export function validateConfiguration(
     }
   }
 
-  // Tab 5: Queue max-limit, IP Bindings & Batch Vouchers
+  // Tab 5: Queue max-limit, IP Bindings & Login Methods
   if (config.rosVersion === "v7" && config.queueType !== "simple") {
     const rawLimit = (config.parentQueueMaxLimit || "").trim();
     if (!rawLimit) {
@@ -853,67 +853,6 @@ export function validateConfiguration(
       messageAr: "تم تعطيل HTTP-CHAP و HTTP-PAP معاً؛ لن يتمكن المشتركون من تسجيل الدخول عبر نموذج الكروت في الصفحة",
       messageEn: "Both HTTP-CHAP and HTTP-PAP are disabled; standard voucher/password logins will not work",
     });
-  }
-
-  if (config.generateVouchersBatch) {
-    const targetMode =
-      effectiveAuthMode === "hotspot_only"
-        ? "hotspot"
-        : effectiveAuthMode === "userman_radius"
-          ? "userman"
-          : (config.voucherTarget === "hotspot" ? "hotspot" : "userman");
-
-    const validProfile =
-      targetMode === "userman"
-        ? (config.umProfiles || []).some((p) => p.name === config.voucherSelectedProfile)
-        : hotspotProfiles.some((p) => p.name === config.voucherSelectedProfile);
-
-    if (!validProfile) {
-      issues.push({
-        id: "adv_voucher_profile_missing",
-        severity: "error",
-        tab: 5,
-        field: "voucherSelectedProfile",
-        messageAr:
-          targetMode === "userman"
-            ? `الباقة المحددة لتوليد الكروت ("${config.voucherSelectedProfile}") غير موجودة في باقات اليوزر مانجر`
-            : `البروفايل المحدد لتوليد الكروت ("${config.voucherSelectedProfile}") غير موجود في بروفايلات الهوتسبوت`,
-        messageEn:
-          targetMode === "userman"
-            ? `Selected voucher profile ("${config.voucherSelectedProfile}") does not match any User Manager profile`
-            : `Selected voucher profile ("${config.voucherSelectedProfile}") does not match any Hotspot user profile`,
-      });
-    }
-
-    if (targetMode === "userman") {
-      if (!config.syncProfilesToUserman && config.radiusServerIp.trim() === "127.0.0.1") {
-        issues.push({
-          id: "adv_voucher_um_sync_disabled",
-          severity: "warning",
-          tab: 5,
-          field: "syncProfilesToUserman",
-          messageAr: "توليد كروت اليوزر مانجر مفعّل بينما مزامنة باقات اليوزر مانجر معطلة؛ تأكد أن الباقة موجودة مسبقاً على الراوتر",
-          messageEn: "User Manager voucher generation is enabled while User Manager profile sync is disabled",
-        });
-      }
-
-      const trimmedGroup = (config.voucherUmGroup || "").trim();
-      if (
-        config.rosVersion === "v7" &&
-        trimmedGroup &&
-        trimmedGroup !== "default" &&
-        !(config.umGroups || []).some((g) => g.name === trimmedGroup)
-      ) {
-        issues.push({
-          id: "adv_voucher_um_group_missing",
-          severity: "error",
-          tab: 5,
-          field: "voucherUmGroup",
-          messageAr: `مجموعة اليوزر مانجر المحددة للكروت ("${trimmedGroup}") غير موجودة في مجموعات v7`,
-          messageEn: `Selected voucher group ("${trimmedGroup}") does not exist in v7 User Manager groups`,
-        });
-      }
-    }
   }
 
   return issues;

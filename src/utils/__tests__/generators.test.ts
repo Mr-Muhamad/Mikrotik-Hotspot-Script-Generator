@@ -6,7 +6,6 @@ import {
   ALL_UM_WEEKDAYS,
   DEFAULT_CONFIG,
   DEFAULT_HOTSPOT_PROFILES,
-  generateCryptoVoucherCodes,
   hydrateConfig,
   hydrateHotspotProfiles,
 } from "../../constants/defaults.ts";
@@ -28,7 +27,6 @@ import {
 } from "../htmlTemplateGenerator.ts";
 import { validateConfiguration } from "../validation.ts";
 import { buildDeploymentReadme, createZipBytes, stripConfigSecrets } from "../zipExporter.ts";
-import { generatePrintableVouchersHtml, generateVouchersCsv } from "../voucherExport.ts";
 
 function makeBaseConfig(overrides: Partial<HotspotConfig> = {}): HotspotConfig {
   return {
@@ -191,13 +189,6 @@ test("hotspot_only mode emits separated local Hotspot profiles and omits RADIUS/
   const script = generateMikrotikScript(
     makeBaseConfig({
       authMode: "hotspot_only",
-      generateVouchersBatch: true,
-      voucherCount: 3,
-      voucherPrefix: "CARD-",
-      voucherCodes: ["a1b2", "c3d4", "e5f6"],
-      voucherSelectedProfile: "hs-2M",
-      voucherLocalLimitUptime: "6h",
-      voucherLocalLimitBytesMb: 100,
     }),
     sampleHotspotProfiles
   );
@@ -210,7 +201,6 @@ test("hotspot_only mode emits separated local Hotspot profiles and omits RADIUS/
   assert.match(script, /connection-state=established,related hotspot=from-client/);
   assert.doesNotMatch(script, /\/radius\n/);
   assert.doesNotMatch(script, /\/user-manager/);
-  assert.match(script, /:if \(\[:len \[\/ip hotspot user find name="CARD-a1b2"\]\] = 0\) do=\{ \/ip hotspot user add name="CARD-a1b2" password="CARD-a1b2" profile="hs-2M" limit-uptime=6h limit-bytes-total=104857600 \}/);
 });
 
 test("userman_radius mode omits conflicting local profiles and emits official v7 & v6 User Manager commands", () => {
@@ -272,13 +262,6 @@ test("userman_radius mode omits conflicting local profiles and emits official v7
         ],
       },
     ],
-    generateVouchersBatch: true,
-    voucherCount: 2,
-    voucherPrefix: "VIP-",
-    voucherCodes: ["11aa", "22bb"],
-    voucherSelectedProfile: "UM-DayNight",
-    voucherUmGroup: "vip-group",
-    voucherSharedUsers: 2,
   });
 
   const v7 = generateMikrotikScript(dayNightConfig, sampleHotspotProfiles);
@@ -289,7 +272,6 @@ test("userman_radius mode omits conflicting local profiles and emits official v7
   assert.match(v7, /name="lim_day" rate-limit-rx=512k rate-limit-tx=2M rate-limit-min-rx=256k rate-limit-min-tx=1M rate-limit-burst-rx=1M rate-limit-burst-tx=4M rate-limit-burst-threshold-rx=384k rate-limit-burst-threshold-tx=1500k rate-limit-burst-time-rx=8s rate-limit-burst-time-tx=8s rate-limit-priority=8 transfer-limit=5368709120 reset-counters-interval=monthly reset-counters-start-time=00:00:00/);
   assert.match(v7, /add profile="UM-DayNight" limitation="lim_day" from-time=08:00:00 till-time=23:59:59/);
   assert.match(v7, /add profile="UM-DayNight" limitation="lim_night" from-time=00:00:00 till-time=07:59:59/);
-  assert.match(v7, /\/user-manager user add name="VIP-11aa" password="VIP-11aa" group="vip-group" shared-users=2/);
   assert.doesNotMatch(v7, /:rndstr/);
 
   const v6 = generateMikrotikScript({ ...dayNightConfig, rosVersion: "v6" }, sampleHotspotProfiles);
@@ -298,8 +280,6 @@ test("userman_radius mode omits conflicting local profiles and emits official v7
   assert.match(v6, /owner="admin" name="lim_day" rate-limit-rx=512k rate-limit-tx=2M .* rate-limit-burst-treshold-rx=384k rate-limit-burst-treshold-tx=1500k rate-limit-burst-time-rx=8s rate-limit-burst-time-tx=8s .* transfer-limit=5368709120 group-name="hs-2M" ip-pool="hs-pool-ether2" address-list="um_vip"/);
   assert.match(v6, /starts-at=logon override-shared-users=2/);
   assert.match(v6, /\/tool user-manager profile profile-limitation/);
-  assert.match(v6, /\/tool user-manager user add username="VIP-11aa" password="VIP-11aa" customer="admin" shared-users=2/);
-  assert.match(v6, /create-and-activate-profile numbers=\[find username="VIP-11aa"\] customer="admin" profile="UM-DayNight"/);
   assert.doesNotMatch(v6, /% 65537/);
 });
 
@@ -308,19 +288,12 @@ test("hybrid mode emits both local Hotspot profiles and User Manager setup", () 
     makeBaseConfig({
       rosVersion: "v7",
       authMode: "hybrid",
-      generateVouchersBatch: true,
-      voucherCount: 2,
-      voucherPrefix: "HYB-",
-      voucherCodes: ["aa11", "bb22"],
-      voucherTarget: "hotspot",
-      voucherSelectedProfile: "hs-2M",
     }),
     sampleHotspotProfiles
   );
 
   assert.match(hybrid, /add name="hs-2M" rate-limit=/);
   assert.match(hybrid, /\/user-manager\nset enabled=yes/);
-  assert.match(hybrid, /\/ip hotspot user add name="HYB-aa11" password="HYB-aa11" profile="hs-2M"/);
 });
 
 test("LAN Bridge, Bridge VLAN Filtering, CAKE Queue, and Firewall rules remain valid", () => {
@@ -379,14 +352,14 @@ test("validateConfiguration validates separated Hotspot and User Manager entitie
   const hsOnlyIssues = validateConfiguration(
     makeBaseConfig({
       authMode: "hotspot_only",
-      generateVouchersBatch: true,
-      voucherSelectedProfile: "NON_EXISTENT",
+      loginHttpChap: false,
+      loginHttpPap: false,
     }),
     [{ ...sampleHotspotProfiles[0], uploadLimit: "abc" }]
   );
   const hsIds = new Set(hsOnlyIssues.map((i) => i.id));
   assert.ok(hsIds.has("prof_rate_invalid_prof_2m"));
-  assert.ok(hsIds.has("adv_voucher_profile_missing"));
+  assert.ok(hsIds.has("adv_no_voucher_login_method"));
 
   const umIssues = validateConfiguration(
     makeBaseConfig({
@@ -601,13 +574,6 @@ test("hexMD5 handles RFC 1321 and binary Latin-1 strings; login HTML supports EN
   assert.match(generateMd5JsFile(), /hexMD5/);
 });
 
-test("generateCryptoVoucherCodes produces unique alphanumeric codes of exact length", () => {
-  const codes = generateCryptoVoucherCodes(200, 5);
-  assert.equal(codes.length, 200);
-  assert.equal(new Set(codes).size, 200);
-  assert.ok(codes.every((c) => /^[0-9a-z]{5}$/.test(c)));
-});
-
 test("calculateSubnetPool excludes gateway IP and validation catches overlaps, duplicate canaries, and invalid limits", () => {
   const pool254 = calculateSubnetPool("192.168.80.254", 24);
   assert.deepEqual(pool254, {
@@ -687,36 +653,11 @@ test("generateHotspotPortalFiles emits complete 5-file portal suite with escapin
   assert.match(enFiles["alogin.html"], /<html lang="en" dir="ltr">/);
 });
 
-test("generateVouchersCsv and generatePrintableVouchersHtml format CSPRNG vouchers cleanly", () => {
-  const cfg = makeBaseConfig({
-    authMode: "userman_radius",
-    loginTitle: `Net <tag>`,
-    dnsName: "net.local",
-    voucherPrefix: "C-",
-    voucherCodes: ["ab12", "cd34"],
-    voucherCount: 2,
-    voucherSelectedProfile: "UM-2M",
-  });
-
-  const csv = generateVouchersCsv(cfg, sampleHotspotProfiles);
-  assert.ok(csv.startsWith("\uFEFFCode,Username,Password,Profile,Plan,Validity,Quota,Price,Portal\r\n"));
-  assert.match(csv, /C-ab12,C-ab12,C-ab12,UM-2M/);
-  assert.match(csv, /C-cd34,C-cd34,C-cd34,UM-2M/);
-
-  const printHtml = generatePrintableVouchersHtml(cfg, sampleHotspotProfiles, "en");
-  assert.match(printHtml, /@media print/);
-  assert.match(printHtml, /C-ab12/);
-  assert.match(printHtml, /C-cd34/);
-  assert.doesNotMatch(printHtml, /Net <tag>/);
-  assert.match(printHtml, /Net &lt;tag&gt;/);
-});
-
 test("stripConfigSecrets clears credentials without mutating original config and README covers 5 portal files", () => {
   const original = makeBaseConfig({
     singleWanPppoePass: "pppoe-secret",
     radiusSecret: "rad-secret",
     usermanAdminPass: "owner-secret",
-    voucherCodes: ["a1b2"],
     wanLines: [
       { id: "w1", name: "W1", interfaceName: "ether1", gatewayIp: "192.168.1.1", pppoePass: "w1-pass", distance: 1, weight: 1, type: "pppoe" },
     ],
@@ -726,7 +667,6 @@ test("stripConfigSecrets clears credentials without mutating original config and
   assert.equal(stripped.singleWanPppoePass, "");
   assert.equal(stripped.radiusSecret, "");
   assert.equal(stripped.usermanAdminPass, "");
-  assert.equal(stripped.voucherCodes, undefined);
   assert.equal(stripped.wanLines[0].pppoePass, "");
 
   // Original remains intact
@@ -996,9 +936,6 @@ test("Cross-feature validation catches PPPoE blank users, UM group CHAP/PAP mism
       loginHttpChap: true,
       loginHttpPap: false,
       umGroups: [{ id: "g1", name: "bad-group", outerAuths: ["pap"], innerAuths: [] }],
-      syncProfilesToUserman: false,
-      generateVouchersBatch: true,
-      voucherUmGroup: "missing-group",
     }),
     sampleHotspotProfiles
   );
@@ -1008,8 +945,6 @@ test("Cross-feature validation catches PPPoE blank users, UM group CHAP/PAP mism
   assert.ok(ids.has("vlan_filtering_needs_bridge"));
   assert.ok(ids.has("vlan_hotspot_without_dhcp_v10"));
   assert.ok(ids.has("um_group_missing_chap_g1"));
-  assert.ok(ids.has("adv_voucher_um_sync_disabled"));
-  assert.ok(ids.has("adv_voucher_um_group_missing"));
 });
 
 test("End-to-End RouterOS .rsc structural & syntax verification across 24 feature combinations", () => {
@@ -1086,11 +1021,6 @@ test("End-to-End RouterOS .rsc structural & syntax verification across 24 featur
             { id: "wg2", domain: "104.16.0.0/12", entryType: "ip", includeHttpsIp: false },
           ],
           ipBindings: [{ id: "ib1", macAddress: "AA:BB:CC:DD:EE:01", ipAddress: "192.168.80.5", type: "bypassed" }],
-          generateVouchersBatch: true,
-          voucherCount: 5,
-          voucherCodes: generateCryptoVoucherCodes(5, 4),
-          voucherSelectedProfile: authMode === "hotspot_only" ? "hs-2M" : "UM-2M",
-          voucherTarget: authMode === "hybrid" ? "userman" : "auto",
         });
 
         const script = generateMikrotikScript(cfg, baseRichProfiles);
