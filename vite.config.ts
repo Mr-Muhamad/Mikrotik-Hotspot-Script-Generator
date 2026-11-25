@@ -40,9 +40,10 @@ function offlinePwaPlugin(): Plugin {
 
       const assets = collectDistFiles(outDir, outDir).sort();
       const fingerprint = crypto.createHash('sha256');
+      fingerprint.update('sw-template-v2;');
       for (const rel of assets) {
-        const stat = fs.statSync(path.join(outDir, rel));
-        fingerprint.update(`${rel}:${stat.size};`);
+        fingerprint.update(rel);
+        fingerprint.update(fs.readFileSync(path.join(outDir, rel)));
       }
       const cacheVersion = fingerprint.digest('hex').slice(0, 10);
 
@@ -106,7 +107,9 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const cache = await caches.open(CACHE_NAME);
         const indexUrl = new URL('index.html', scope).toString();
-        const cached = (await cache.match(indexUrl)) || (await cache.match(scope));
+        const cached =
+          (await cache.match(indexUrl, { ignoreVary: true })) ||
+          (await cache.match(scope, { ignoreVary: true }));
         if (cached) return cached;
         return fetch(req);
       })()
@@ -118,7 +121,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE_NAME);
-        const cached = await cache.match(req);
+        const cached = await cache.match(req, { ignoreVary: true });
         if (cached) return cached;
         const response = await fetch(req);
         if (response && response.ok) {
@@ -134,7 +137,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cache = await caches.open(FONT_CACHE);
-        const cached = await cache.match(req);
+        const cached = await cache.match(req, { ignoreVary: true });
         const networkPromise = fetch(req)
           .then((res) => {
             if (res && (res.ok || res.type === 'opaque')) {
