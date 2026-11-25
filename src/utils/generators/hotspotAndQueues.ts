@@ -220,21 +220,23 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
   script += `${buildHotspotProfileCmd("hsprof1", safeGatewayIp, mainDnsName)}\n\n`;
 
   const addrPerMac = clampInt(config.addressesPerMac || 2, 1, 20, 2);
+  const mainHotspotPool = config.enableUniversalClient ? poolName : "none";
   script += `/ip hotspot remove [ find where name=${serverName} or interface=${effectiveLan} ]\n`;
   script += `/ip hotspot\n`;
-  script += `add address-pool=${poolName} addresses-per-mac=${addrPerMac} disabled=no interface=${effectiveLan} name=${serverName} profile=hsprof1\n\n`;
+  script += `add address-pool=${mainHotspotPool} addresses-per-mac=${addrPerMac} disabled=no interface=${effectiveLan} name=${serverName} profile=hsprof1\n\n`;
 
   // Dedicated Hotspot Profiles & Servers for Hotspot-enabled VLANs
   if (hotspotEnabledVlans.length > 0) {
     hotspotEnabledVlans.forEach((vlan) => {
       const vlanProfName = `hsprof-${vlan.safeIdName}`;
       const vlanDns = sanitizeRosIdentifier((vlan.hotspotDnsName || "").trim() || mainDnsName, mainDnsName);
+      const vlanHotspotPool = config.enableUniversalClient ? `"pool-${vlan.safeIdName}"` : "none";
       script += `/ip hotspot profile remove [ find name="${vlanProfName}" ]\n`;
       script += `/ip hotspot profile\n`;
       script += `${buildHotspotProfileCmd(vlanProfName, vlan.gatewayIp, vlanDns)}\n`;
       script += `/ip hotspot remove [ find where name="hs-${vlan.safeVlanName}" or interface="${vlan.safeVlanName}" ]\n`;
       script += `/ip hotspot\n`;
-      script += `add address-pool="pool-${vlan.safeIdName}" addresses-per-mac=${addrPerMac} disabled=no interface="${vlan.safeVlanName}" name="hs-${vlan.safeVlanName}" profile="${vlanProfName}" comment="Hotspot on VLAN ${vlan.safeVlanId}"\n\n`;
+      script += `add address-pool=${vlanHotspotPool} addresses-per-mac=${addrPerMac} disabled=no interface="${vlan.safeVlanName}" name="hs-${vlan.safeVlanName}" profile="${vlanProfName}" comment="Hotspot on VLAN ${vlan.safeVlanId}"\n\n`;
     });
   }
 

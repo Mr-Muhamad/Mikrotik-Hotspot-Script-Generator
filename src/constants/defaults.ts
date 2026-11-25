@@ -317,7 +317,10 @@ export const DEFAULT_CONFIG: HotspotConfig = {
   poolName: "hs-pool-ether2",
   poolStart: "192.168.80.10",
   poolEnd: "192.168.80.254",
+  dhcpLeaseTime: "1h",
+  enableUniversalClient: false,
   dnsServers: ["8.8.8.8", "1.1.1.1"],
+  forceDnsRedirect: true,
 
   // VLANs
   enableVlans: false,
@@ -427,6 +430,7 @@ export const DEFAULT_CONFIG: HotspotConfig = {
 
   // Advanced & Maintenance
   bypassFasttrack: true,
+  clampTcpMss: true,
   enableAutoCleanScript: true,
   enableScheduledReboot: false,
   enableFirewallHardening: true,
@@ -640,6 +644,16 @@ export function hydrateConfig(raw: unknown): HotspotConfig {
       ? raw.portalLoginMode
       : "both";
   merged.voucherPasswordMode = raw.voucherPasswordMode === "blank" ? "blank" : "same_as_user";
+
+  merged.dhcpLeaseTime =
+    typeof raw.dhcpLeaseTime === "string" && raw.dhcpLeaseTime.trim()
+      ? raw.dhcpLeaseTime.trim()
+      : DEFAULT_CONFIG.dhcpLeaseTime;
+  merged.enableUniversalClient = Boolean(raw.enableUniversalClient);
+  merged.forceDnsRedirect =
+    typeof raw.forceDnsRedirect === "boolean" ? raw.forceDnsRedirect : DEFAULT_CONFIG.forceDnsRedirect;
+  merged.clampTcpMss =
+    typeof raw.clampTcpMss === "boolean" ? raw.clampTcpMss : DEFAULT_CONFIG.clampTcpMss;
 
   if (typeof raw.disableUnusedServices === "boolean" && typeof raw.serviceApi !== "boolean") {
     const enabledLegacy = !raw.disableUnusedServices;

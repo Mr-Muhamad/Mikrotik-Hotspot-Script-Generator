@@ -36,6 +36,7 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
     safeSubnetMask,
     safePoolStart,
     safePoolEnd,
+    safeDhcpLeaseTime,
     networkAddress,
     hasVlans,
     resolvedVlans,
@@ -73,9 +74,10 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
     // VLAN Pools & DHCP Servers
     resolvedVlans.forEach((vlan) => {
       const poolNameVlan = `pool-${vlan.safeIdName}`;
+      const needsVlanPool = vlan.dhcpEnabled || (vlan.enableHotspotOnVlan && config.enableUniversalClient);
 
-      if (vlan.dhcpEnabled || vlan.enableHotspotOnVlan) {
-        script += `/ip pool remove [ find name=${poolNameVlan} ]\n`;
+      script += `/ip pool remove [ find name=${poolNameVlan} ]\n`;
+      if (needsVlanPool) {
         script += `/ip pool\n`;
         script += `add name=${poolNameVlan} ranges=${vlan.poolStart}-${vlan.poolEnd}\n`;
       }
@@ -83,12 +85,12 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
       if (vlan.dhcpEnabled) {
         script += `/ip dhcp-server remove [ find where name="dhcp-${vlan.safeVlanName}" or interface="${vlan.safeVlanName}" ]\n`;
         script += `/ip dhcp-server\n`;
-        script += `add address-pool=${poolNameVlan} disabled=no interface="${vlan.safeVlanName}" name="dhcp-${vlan.safeVlanName}" lease-time=1h\n`;
+        script += `add address-pool=${poolNameVlan} disabled=no interface="${vlan.safeVlanName}" name="dhcp-${vlan.safeVlanName}" lease-time=${safeDhcpLeaseTime}\n`;
 
         script += `/ip dhcp-server network remove [ find where address="${vlan.network}/${vlan.subnetMask}" or comment="DHCP Network for ${vlan.safeVlanName}" ]\n`;
         script += `/ip dhcp-server network\n`;
         script += `add address=${vlan.network}/${vlan.subnetMask} dns-server=${vlan.gatewayIp} gateway=${vlan.gatewayIp} netmask=${vlan.subnetMask} comment="DHCP Network for ${vlan.safeVlanName}"\n\n`;
-      } else if (vlan.enableHotspotOnVlan) {
+      } else if (needsVlanPool) {
         script += `\n`;
       }
     });
@@ -145,6 +147,18 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
       script += `add interface="${vlan.safeVlanName}" list=HOTSPOT_LAN\n`;
     });
     script += `\n`;
+
+    if (hotspotEnabledVlans.length > 0) {
+      script += `/interface list remove [ find name=HOTSPOT_AUTH_IFACES ]\n`;
+      script += `/interface list\n`;
+      script += `add name=HOTSPOT_AUTH_IFACES comment="Hotspot-enabled interfaces"\n`;
+      script += `/interface list member\n`;
+      script += `add interface=${effectiveLan} list=HOTSPOT_AUTH_IFACES\n`;
+      hotspotEnabledVlans.forEach((vlan) => {
+        script += `add interface="${vlan.safeVlanName}" list=HOTSPOT_AUTH_IFACES\n`;
+      });
+      script += `\n`;
+    }
   }
 
   // Sync defconf LAN interface list so MAC-Winbox / input rules do not lock out LAN or VLANs
@@ -181,9 +195,12 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
   });
   script += `}\n\n`;
 
+  const hotspotIfaceMatcher =
+    hotspotEnabledVlans.length > 0 ? "in-interface-list=HOTSPOT_AUTH_IFACES" : `in-interface=${effectiveLan}`;
+
   // Clean previously generated NAT, Mangle, Routing Rules, and Multi-WAN Routes before re-adding
-  script += `/ip firewall nat remove [ find where !dynamic and (comment~"^NAT Masquerade for " or comment="NAT masquerade for single internet WAN") ]\n`;
-  script += `/ip firewall mangle remove [ find where !dynamic and (comment="Bypass Load Balancing for Local, VLAN & Modem Subnets" or comment="Allow Unauthenticated Hotspot Clients to Reach Login Portal" or comment~"^Mark incoming connection on " or comment~"^Route output via " or comment~"^PCC Rule " or comment~"^NTH Rule " or comment~"^NTH Final Rule " or comment~"^Mark routing via ") ]\n`;
+  script += `/ip firewall nat remove [ find where !dynamic and (comment~"^NAT Masquerade for " or comment="NAT masquerade for single internet WAN" or comment~"^Force Hotspot DNS Redirect ") ]\n`;
+  script += `/ip firewall mangle remove [ find where !dynamic and (comment="Bypass Load Balancing for Local, VLAN & Modem Subnets" or comment~"^Bypass Load Balancing for Redirected DNS " or comment="Allow Unauthenticated Hotspot Clients to Reach Login Portal" or comment~"^Mark incoming connection on " or comment~"^Route output via " or comment~"^PCC Rule " or comment~"^NTH Rule " or comment~"^NTH Final Rule " or comment~"^Mark routing via ") ]\n`;
   if (isV7) {
     script += `/routing rule remove [ find comment="Keep Local Subnet in main FIB" ]\n`;
   } else {
@@ -200,6 +217,10 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
       const outIface = getWanOutInterface(line);
       script += `add action=masquerade chain=srcnat out-interface=${outIface} comment="NAT Masquerade for ${escapeRosString(line.name)}"\n`;
     });
+    if (config.forceDnsRedirect !== false) {
+      script += `add action=redirect chain=dstnat dst-port=53 ${hotspotIfaceMatcher} protocol=udp to-ports=53 comment="Force Hotspot DNS Redirect UDP"\n`;
+      script += `add action=redirect chain=dstnat dst-port=53 ${hotspotIfaceMatcher} protocol=tcp to-ports=53 comment="Force Hotspot DNS Redirect TCP"\n`;
+    }
     script += `\n`;
 
     if (config.loadBalancingMethod === "pcc" || config.loadBalancingMethod === "nth") {
@@ -262,28 +283,19 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
       script += `\n`;
 
       const lanMatcher = hasVlans ? `in-interface-list=HOTSPOT_LAN` : `in-interface=${effectiveLan}`;
-      let hotspotMatcher = `in-interface=${effectiveLan}`;
-      if (hotspotEnabledVlans.length > 0) {
-        script += `/interface list remove [ find name=HOTSPOT_AUTH_IFACES ]\n`;
-        script += `/interface list\n`;
-        script += `add name=HOTSPOT_AUTH_IFACES comment="Hotspot-enabled interfaces"\n`;
-        script += `/interface list member\n`;
-        script += `add interface=${effectiveLan} list=HOTSPOT_AUTH_IFACES\n`;
-        hotspotEnabledVlans.forEach((vlan) => {
-          script += `add interface="${vlan.safeVlanName}" list=HOTSPOT_AUTH_IFACES\n`;
-        });
-        script += `\n`;
-        hotspotMatcher = `in-interface-list=HOTSPOT_AUTH_IFACES`;
-      }
 
       script += isPcc
         ? `# PCC (Per Connection Classifier) Mangle Rules for High Stability & HTTPS Support\n`
         : `# NTH (Round-Robin Connection) Mangle Rules\n`;
       script += `/ip firewall mangle\n`;
 
-      // Accept local/modem subnets & unauthenticated Hotspot portal traffic
+      // Accept local/modem subnets, redirected DNS, & unauthenticated Hotspot portal traffic
       script += `add action=accept chain=prerouting dst-address-list=LOCAL_SUBNETS comment="Bypass Load Balancing for Local, VLAN & Modem Subnets"\n`;
-      script += `add action=accept chain=prerouting ${hotspotMatcher} hotspot=!auth comment="Allow Unauthenticated Hotspot Clients to Reach Login Portal"\n`;
+      if (config.forceDnsRedirect !== false) {
+        script += `add action=accept chain=prerouting dst-port=53 ${hotspotIfaceMatcher} protocol=udp comment="Bypass Load Balancing for Redirected DNS UDP"\n`;
+        script += `add action=accept chain=prerouting dst-port=53 ${hotspotIfaceMatcher} protocol=tcp comment="Bypass Load Balancing for Redirected DNS TCP"\n`;
+      }
+      script += `add action=accept chain=prerouting ${hotspotIfaceMatcher} hotspot=!auth comment="Allow Unauthenticated Hotspot Clients to Reach Login Portal"\n`;
 
       // WAN Input connection marking
       lines.forEach((line, idx) => {
@@ -473,7 +485,12 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
   } else {
     // Single WAN Default NAT
     script += `/ip firewall nat\n`;
-    script += `add action=masquerade chain=srcnat out-interface=${wanOutInterfaces[0]} comment="NAT masquerade for single internet WAN"\n\n`;
+    script += `add action=masquerade chain=srcnat out-interface=${wanOutInterfaces[0]} comment="NAT masquerade for single internet WAN"\n`;
+    if (config.forceDnsRedirect !== false) {
+      script += `add action=redirect chain=dstnat dst-port=53 ${hotspotIfaceMatcher} protocol=udp to-ports=53 comment="Force Hotspot DNS Redirect UDP"\n`;
+      script += `add action=redirect chain=dstnat dst-port=53 ${hotspotIfaceMatcher} protocol=tcp to-ports=53 comment="Force Hotspot DNS Redirect TCP"\n`;
+    }
+    script += `\n`;
   }
 
   // 4. DHCP Server & IP Pools for Main LAN
@@ -486,7 +503,7 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
 
   script += `/ip dhcp-server remove [ find where name=dhcp-hs or interface=${effectiveLan} ]\n`;
   script += `/ip dhcp-server\n`;
-  script += `add address-pool=${poolName} disabled=no interface=${effectiveLan} name=dhcp-hs lease-time=1h\n\n`;
+  script += `add address-pool=${poolName} disabled=no interface=${effectiveLan} name=dhcp-hs lease-time=${safeDhcpLeaseTime}\n\n`;
 
   script += `/ip dhcp-server network remove [ find where address="${networkAddress}/${safeSubnetMask}" or comment="Main Hotspot DHCP Network" ]\n`;
   script += `/ip dhcp-server network\n`;

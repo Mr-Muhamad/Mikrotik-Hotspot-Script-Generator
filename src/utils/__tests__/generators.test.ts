@@ -796,6 +796,11 @@ function assertValidRouterOsScript(script: string, label: string): void {
     const refIdx = script.indexOf("in-interface-list=HOTSPOT_LAN");
     assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: HOTSPOT_LAN referenced before definition`);
   }
+  if (script.includes("in-interface-list=HOTSPOT_AUTH_IFACES")) {
+    const defIdx = script.indexOf("add name=HOTSPOT_AUTH_IFACES");
+    const refIdx = script.indexOf("in-interface-list=HOTSPOT_AUTH_IFACES");
+    assert.ok(defIdx > -1 && defIdx < refIdx, `${label}: HOTSPOT_AUTH_IFACES referenced before definition`);
+  }
   if (script.includes("dst-address-list=HOTSPOT_GW_IPS")) {
     const defIdx = script.indexOf("list=HOTSPOT_GW_IPS");
     const refIdx = script.indexOf("dst-address-list=HOTSPOT_GW_IPS");
@@ -1029,6 +1034,10 @@ test("End-to-End RouterOS .rsc structural & syntax verification across 24 featur
           serviceFtp: i % 3 === 0,
           portalLoginMode: i % 3 === 0 ? "voucher_only" : i % 3 === 1 ? "user_pass_only" : "both",
           voucherPasswordMode: i % 2 === 0 ? "blank" : "same_as_user",
+          dhcpLeaseTime: i % 3 === 0 ? "30m" : i % 3 === 1 ? "1h" : "12h",
+          enableUniversalClient: i % 2 === 1,
+          forceDnsRedirect: i % 3 !== 2,
+          clampTcpMss: i % 4 !== 3,
         });
 
         const script = generateMikrotikScript(cfg, baseRichProfiles);
@@ -1128,4 +1137,125 @@ test("Standalone External RADIUS backend omits local User Manager, sets src-addr
   const extReadme = buildDeploymentReadme(extCfg, "hotspot.rsc", "en");
   assert.doesNotMatch(extReadme, /user-manager \(extra package\)/);
   assert.match(extReadme, /Standalone External RADIUS Server at 10\.50\.0\.10:1812/);
+});
+
+test("TCP MSS clamping, forced DNS redirect, Universal Client address-pool=none, and configurable DHCP lease time", () => {
+  const defaultScript = generateMikrotikScript(makeBaseConfig(), sampleHotspotProfiles);
+  assert.match(
+    defaultScript,
+    /\/ip firewall mangle remove \[ find where !dynamic and comment="Clamp TCP MSS to PMTU" \]/
+  );
+  assert.match(
+    defaultScript,
+    /add action=change-mss chain=forward new-mss=clamp-to-pmtu passthrough=yes protocol=tcp tcp-flags=syn comment="Clamp TCP MSS to PMTU"/
+  );
+  assert.match(
+    defaultScript,
+    /add action=redirect chain=dstnat dst-port=53 in-interface=ether2 protocol=udp to-ports=53 comment="Force Hotspot DNS Redirect UDP"/
+  );
+  assert.match(
+    defaultScript,
+    /add action=redirect chain=dstnat dst-port=53 in-interface=ether2 protocol=tcp to-ports=53 comment="Force Hotspot DNS Redirect TCP"/
+  );
+  assert.match(
+    defaultScript,
+    /\/ip hotspot\nadd address-pool=none addresses-per-mac=2 disabled=no interface=ether2 name=hotspot1 profile=hsprof1/
+  );
+  assert.match(
+    defaultScript,
+    /add address-pool=hs-pool-ether2 disabled=no interface=ether2 name=dhcp-hs lease-time=1h/
+  );
+
+  // Hotspot VLAN + Non-Hotspot VLAN + PCC Multi-WAN + Universal Client enabled + custom lease time 6h
+  const customScript = generateMikrotikScript(
+    makeBaseConfig({
+      rosVersion: "v7",
+      dhcpLeaseTime: "6h",
+      enableUniversalClient: true,
+      forceDnsRedirect: true,
+      clampTcpMss: true,
+      enableVlans: true,
+      vlans: [
+        {
+          id: "v10",
+          name: "vlan10_staff",
+          vlanId: 10,
+          parentInterface: "ether2",
+          gatewayIp: "172.16.10.1",
+          subnetMask: 24,
+          dhcpEnabled: true,
+          poolStart: "172.16.10.10",
+          poolEnd: "172.16.10.254",
+          enableHotspotOnVlan: false,
+        },
+        {
+          id: "v20",
+          name: "vlan20_guests",
+          vlanId: 20,
+          parentInterface: "ether2",
+          gatewayIp: "172.16.20.1",
+          subnetMask: 24,
+          dhcpEnabled: true,
+          poolStart: "172.16.20.10",
+          poolEnd: "172.16.20.254",
+          enableHotspotOnVlan: true,
+        },
+      ],
+      loadBalancingMethod: "pcc",
+    }),
+    sampleHotspotProfiles
+  );
+
+  assert.match(customScript, /add address-pool=pool-vlan10_staff disabled=no interface="vlan10_staff" name="dhcp-vlan10_staff" lease-time=6h/);
+  assert.match(customScript, /add address-pool=pool-vlan20_guests disabled=no interface="vlan20_guests" name="dhcp-vlan20_guests" lease-time=6h/);
+  assert.match(customScript, /add address-pool=hs-pool-ether2 disabled=no interface=ether2 name=dhcp-hs lease-time=6h/);
+  assert.match(customScript, /add address-pool=hs-pool-ether2 addresses-per-mac=2 disabled=no interface=ether2 name=hotspot1/);
+  assert.match(customScript, /add address-pool="pool-vlan20_guests" addresses-per-mac=2 disabled=no interface="vlan20_guests" name="hs-vlan20_guests"/);
+  assert.match(customScript, /add interface="vlan20_guests" list=HOTSPOT_AUTH_IFACES/);
+  assert.doesNotMatch(customScript, /add interface="vlan10_staff" list=HOTSPOT_AUTH_IFACES/);
+  assert.match(customScript, /add action=redirect chain=dstnat dst-port=53 in-interface-list=HOTSPOT_AUTH_IFACES protocol=udp to-ports=53 comment="Force Hotspot DNS Redirect UDP"/);
+  assert.match(customScript, /add action=accept chain=prerouting dst-port=53 in-interface-list=HOTSPOT_AUTH_IFACES protocol=udp comment="Bypass Load Balancing for Redirected DNS UDP"/);
+
+  // Toggling both rules off omits adds while preserving idempotent !dynamic cleanup
+  const disabledRulesScript = generateMikrotikScript(
+    makeBaseConfig({ clampTcpMss: false, forceDnsRedirect: false }),
+    sampleHotspotProfiles
+  );
+  assert.match(
+    disabledRulesScript,
+    /\/ip firewall mangle remove \[ find where !dynamic and comment="Clamp TCP MSS to PMTU" \]/
+  );
+  assert.doesNotMatch(disabledRulesScript, /action=change-mss/);
+  assert.doesNotMatch(disabledRulesScript, /action=redirect chain=dstnat dst-port=53/);
+
+  // Validation and hydration checks
+  assert.equal(validateConfiguration(makeBaseConfig({ dhcpLeaseTime: "30m" }), sampleHotspotProfiles).length, 0);
+  assert.equal(validateConfiguration(makeBaseConfig({ dhcpLeaseTime: "00:45:00" }), sampleHotspotProfiles).length, 0);
+  const badLeaseIssues = validateConfiguration(
+    makeBaseConfig({ dhcpLeaseTime: "invalid" }),
+    sampleHotspotProfiles
+  );
+  assert.ok(badLeaseIssues.some((i) => i.id === "net_dhcp_lease_invalid"));
+  const zeroLeaseIssues = validateConfiguration(
+    makeBaseConfig({ dhcpLeaseTime: "0s" }),
+    sampleHotspotProfiles
+  );
+  assert.ok(zeroLeaseIssues.some((i) => i.id === "net_dhcp_lease_invalid"));
+
+  const defaultHydrated = hydrateConfig({});
+  assert.equal(defaultHydrated.dhcpLeaseTime, "1h");
+  assert.equal(defaultHydrated.enableUniversalClient, false);
+  assert.equal(defaultHydrated.forceDnsRedirect, true);
+  assert.equal(defaultHydrated.clampTcpMss, true);
+
+  const customHydrated = hydrateConfig({
+    dhcpLeaseTime: "12h",
+    enableUniversalClient: true,
+    forceDnsRedirect: false,
+    clampTcpMss: false,
+  });
+  assert.equal(customHydrated.dhcpLeaseTime, "12h");
+  assert.equal(customHydrated.enableUniversalClient, true);
+  assert.equal(customHydrated.forceDnsRedirect, false);
+  assert.equal(customHydrated.clampTcpMss, false);
 });

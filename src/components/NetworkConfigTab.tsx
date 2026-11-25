@@ -26,8 +26,20 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
   const gwError = getFieldError("gatewayIp");
   const poolStartError = getFieldError("poolStart");
   const poolEndError = getFieldError("poolEnd");
+  const dhcpLeaseError = getFieldError("dhcpLeaseTime");
   const singleWanIpError = getFieldError("singleWanIp");
   const singleWanGwError = getFieldError("singleWanGateway");
+
+  const leasePresets = [
+    { value: "30m", ar: "30m (كافيهات مزدحمة)", en: "30m (High-turnover Cafes)" },
+    { value: "1h", ar: "1h (افتراضي متوازن)", en: "1h (Balanced Default)" },
+    { value: "6h", ar: "6h (متوسط)", en: "6h (Medium Stay)" },
+    { value: "12h", ar: "12h (مكاتب وشركات)", en: "12h (Offices / Workspaces)" },
+    { value: "1d", ar: "1d (شبكات سكنية)", en: "1d (Residential / Home)" },
+    { value: "3d", ar: "3d (إقامة طويلة)", en: "3d (Long-stay Guests)" },
+  ];
+  const currentLease = (config.dhcpLeaseTime || "1h").trim() || "1h";
+  const hasPresetLease = leasePresets.some((p) => p.value === currentLease);
 
   // Automatically update DHCP IP pool ranges when gateway IP or subnet mask changes
   const handleGatewayChange = (ip: string) => {
@@ -591,7 +603,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         <h3 className="text-sm font-medium text-slate-200">
           {isAr ? "توزيع عناوين IP (DHCP IP Pool)" : "IP Pool & Range Allocation"}
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="net-pool-start" className="text-slate-300 text-xs">
               {isAr ? "بداية مجال توزيع العناوين" : "IP Pool Start"}
@@ -632,7 +644,67 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
               <span className="text-xs text-red-300">{isAr ? poolEndError.messageAr : poolEndError.messageEn}</span>
             )}
           </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="net-dhcp-lease" className="text-slate-300 text-xs">
+              {isAr ? "مدة حجز الـ IP (DHCP Lease Time)" : "DHCP Lease Time"}
+            </label>
+            <select
+              id="net-dhcp-lease"
+              name="dhcpLeaseTime"
+              dir="ltr"
+              aria-invalid={Boolean(dhcpLeaseError)}
+              className={`min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400 ${
+                dhcpLeaseError ? "border-red-500" : "border-slate-700"
+              }`}
+              value={currentLease}
+              onChange={(e) => onChange({ dhcpLeaseTime: e.target.value })}
+            >
+              {!hasPresetLease && (
+                <option value={currentLease}>{currentLease}</option>
+              )}
+              {leasePresets.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {isAr ? opt.ar : opt.en}
+                </option>
+              ))}
+            </select>
+            {dhcpLeaseError ? (
+              <span className="text-xs text-red-300">{isAr ? dhcpLeaseError.messageAr : dhcpLeaseError.messageEn}</span>
+            ) : (
+              <span className="text-[11px] text-slate-400">
+                {isAr
+                  ? "المدة المناسبة تمنع امتلاء الـ Pool في الموبايلات ذات MAC العشوائي."
+                  : "Shorter leases prevent IP pool exhaustion from randomized phone MACs."}
+              </span>
+            )}
+          </div>
         </div>
+
+        <label
+          htmlFor="net-universal-client"
+          className="min-h-[44px] flex items-start gap-2.5 pt-2 border-t border-slate-800/60 text-xs text-slate-300 cursor-pointer"
+        >
+          <input
+            id="net-universal-client"
+            name="enableUniversalClient"
+            type="checkbox"
+            className="w-4 h-4 flex-shrink-0 mt-0.5 accent-emerald-500"
+            checked={Boolean(config.enableUniversalClient)}
+            onChange={(e) => onChange({ enableUniversalClient: e.target.checked })}
+          />
+          <span className="leading-relaxed">
+            <strong className="text-slate-100 block">
+              {isAr
+                ? "تفعيل Universal Client ARP-NAT على الهوتسبوت (افتراضياً معطّل: address-pool=none)"
+                : "Enable Hotspot Universal Client ARP-NAT (Default Off: address-pool=none)"}
+            </strong>
+            <span className="text-slate-400 block mt-0.5">
+              {isAr
+                ? "إبقاؤه معطلاً يمنع مشاكل التكرار والـ IP الوهمي (Address != To-Address) وتعارض الأكسس بوينت؛ فعّله فقط إذا أردت قبول أجهزة بـ IP يدوي مختلف (مثل الفنادق)."
+                : "Keeping this off prevents ghost IP translation, AP IP hijacking, and double pool consumption. Enable only for venues expecting foreign static client IPs."}
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
@@ -673,6 +745,32 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
             />
           </div>
         </div>
+
+        <label
+          htmlFor="net-force-dns-redirect"
+          className="min-h-[44px] flex items-start gap-2.5 pt-2 border-t border-slate-800/60 text-xs text-slate-300 cursor-pointer"
+        >
+          <input
+            id="net-force-dns-redirect"
+            name="forceDnsRedirect"
+            type="checkbox"
+            className="w-4 h-4 flex-shrink-0 mt-0.5 accent-emerald-500"
+            checked={config.forceDnsRedirect !== false}
+            onChange={(e) => onChange({ forceDnsRedirect: e.target.checked })}
+          />
+          <span className="leading-relaxed">
+            <strong className="text-slate-100 block">
+              {isAr
+                ? "إجبار توجيه طلبات DNS إلى الراوتر (Force DNS Redirect UDP/TCP 53)"
+                : "Force Client DNS Redirect to Router (UDP/TCP 53 dst-nat)"}
+            </strong>
+            <span className="text-slate-400 block mt-0.5">
+              {isAr
+                ? "يضمن فتح صفحة الدخول والحالة والخروج (مثل hotspot.local/status) حتى إذا وضع العميل DNS يدوياً على هاتفه مثل 8.8.8.8."
+                : "Ensures portal hostnames (hotspot.local/status) and router DNS caching work even if phones override DNS manually."}
+            </span>
+          </span>
+        </label>
       </div>
     </div>
   );

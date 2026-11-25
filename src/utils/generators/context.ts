@@ -47,6 +47,7 @@ export interface GeneratorContext {
   safeSubnetMask: number;
   safePoolStart: string;
   safePoolEnd: string;
+  safeDhcpLeaseTime: string;
   networkAddress: string;
   dnsServersStr: string;
   hasVlans: boolean;
@@ -119,6 +120,12 @@ export function buildGeneratorContext(
   const safeSubnetMask = clampInt(config.subnetMask, 8, 30, 24);
   const safePoolStart = sanitizeIpv4(config.poolStart, "192.168.80.10");
   const safePoolEnd = sanitizeIpv4(config.poolEnd, "192.168.80.254");
+  const rawLease = (config.dhcpLeaseTime || "1h").trim();
+  const safeDhcpLeaseTime =
+    /^(?:(?:\d+[wdhms])+|\d{1,2}:[0-5]\d:[0-5]\d)$/i.test(rawLease) &&
+    !/^(?:0+[wdhms])+$|^00:00:00$/i.test(rawLease)
+      ? rawLease
+      : "1h";
   const networkAddress = calculateNetworkAddress(safeGatewayIp, safeSubnetMask, "192.168.80.0");
   const dnsServersStr =
     (config.dnsServers || []).map((s) => sanitizeIpv4(s, "")).filter(Boolean).join(",") || "8.8.8.8,1.1.1.1";
@@ -180,6 +187,7 @@ export function buildGeneratorContext(
     safeSubnetMask,
     safePoolStart,
     safePoolEnd,
+    safeDhcpLeaseTime,
     networkAddress,
     dnsServersStr,
     hasVlans,

@@ -204,7 +204,10 @@ export interface HotspotConfig {
   poolName: string;          // e.g., "hs-pool-ether2"
   poolStart: string;         // e.g., "192.168.80.10"
   poolEnd: string;           // e.g., "192.168.80.254"
+  dhcpLeaseTime: string;     // e.g., "1h"
+  enableUniversalClient: boolean;
   dnsServers: string[];      // e.g., ["8.8.8.8", "1.1.1.1"]
+  forceDnsRedirect: boolean;
 
   // VLANs
   enableVlans: boolean;
@@ -272,6 +275,7 @@ export interface HotspotConfig {
 
   // Advanced features & Scripts
   bypassFasttrack: boolean;
+  clampTcpMss: boolean;
   enableAutoCleanScript: boolean;
   enableScheduledReboot: boolean;
   enableFirewallHardening: boolean;

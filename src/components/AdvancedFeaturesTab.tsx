@@ -371,6 +371,30 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
           </div>
         </div>
 
+        {/* Automatic TCP MSS Clamping */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="flex justify-between items-start gap-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                {isAr ? "ضبط حجم حزم TCP تلقائياً (TCP MSS Clamping)" : "Automatic TCP MSS Clamping (clamp-to-pmtu)"}
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {isAr
+                  ? "يمنع تعليق المواقع والتطبيقات (مثل فيسبوك والبنوك ويوتيوب) عند استخدام خطوط PPPoE أو إنترنت بـ MTU أقل من 1500."
+                  : "Prevents websites and HTTPS apps from stalling over PPPoE or sub-1500 MTU WAN links by dynamically clamping TCP SYN MSS to Path MTU."}
+              </p>
+            </div>
+            <ToggleSwitch
+              id="adv-clamp-mss-switch"
+              size="sm"
+              checked={config.clampTcpMss !== false}
+              onChange={(checked) => onChange({ clampTcpMss: checked })}
+              ariaLabel={isAr ? "تفعيل ضبط TCP MSS تلقائياً" : "Enable TCP MSS Clamping"}
+            />
+          </div>
+        </div>
+
         {/* Walled Garden / Allowed Websites */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">

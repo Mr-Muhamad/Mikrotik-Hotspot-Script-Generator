@@ -150,6 +150,13 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
   script += `set api disabled=${config.serviceApi ? "no" : "yes"}\n`;
   script += `set api-ssl disabled=${config.serviceApiSsl ? "no" : "yes"}\n\n`;
 
+  script += `/ip firewall mangle remove [ find where !dynamic and comment="Clamp TCP MSS to PMTU" ]\n`;
+  if (config.clampTcpMss !== false) {
+    script += `# TCP MSS Clamping (Fixes HTTPS/App stalls on PPPoE & sub-1500 MTU WANs)\n`;
+    script += `/ip firewall mangle\n`;
+    script += `add action=change-mss chain=forward new-mss=clamp-to-pmtu passthrough=yes protocol=tcp tcp-flags=syn comment="Clamp TCP MSS to PMTU"\n\n`;
+  }
+
   script += `/ip firewall mangle remove [ find where !dynamic and comment~"^Anti-Sharing: Force TTL=1" ]\n`;
   if (config.preventSharingTtl) {
     script += `# Anti-Sharing: Force TTL=1 to prevent client router/hotspot sharing\n`;

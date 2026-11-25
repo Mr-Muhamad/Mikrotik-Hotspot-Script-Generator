@@ -24,6 +24,8 @@ const RATE_REGEX = /^\d+(\.\d+)?[kKmMgG]?$/;
 const DUAL_RATE_REGEX = /^\d+(\.\d+)?[kKmMgG]?\/\d+(\.\d+)?[kKmMgG]?$/;
 const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/;
 const HOSTNAME_REGEX = /^[a-zA-Z0-9.-]+$/;
+const ROS_LEASE_DURATION_REGEX = /^(?:(?:\d+[wdhms])+|\d{1,2}:[0-5]\d:[0-5]\d)$/i;
+const ZERO_DURATION_REGEX = /^(?:0+[wdhms])+$|^00:00:00$/i;
 
 function getSubnetRange(ip: string, cidr: number): { start: number; end: number; label: string } | null {
   const ipInt = parseIpv4ToInt(ip);
@@ -151,6 +153,18 @@ export function validateConfiguration(
         messageEn: `DHCP Pool (${config.poolStart}-${config.poolEnd}) includes Gateway IP ${config.gatewayIp}`,
       });
     }
+  }
+
+  const leaseStr = (config.dhcpLeaseTime || "").trim();
+  if (!leaseStr || !ROS_LEASE_DURATION_REGEX.test(leaseStr) || ZERO_DURATION_REGEX.test(leaseStr)) {
+    issues.push({
+      id: "net_dhcp_lease_invalid",
+      severity: "error",
+      tab: 0,
+      field: "dhcpLeaseTime",
+      messageAr: `مدة حجز DHCP غير صالحة: "${config.dhcpLeaseTime}" (استخدم صيغة مثل 30m أو 1h أو 12h أو 1d)`,
+      messageEn: `Invalid DHCP Lease Time: "${config.dhcpLeaseTime}" (use RouterOS duration like 30m, 1h, 12h, or 1d)`,
+    });
   }
 
   (config.dnsServers || []).forEach((dns, idx) => {
@@ -368,7 +382,7 @@ export function validateConfiguration(
           });
         }
 
-        if (vlan.dhcpEnabled || vlan.enableHotspotOnVlan) {
+        if (vlan.dhcpEnabled || (vlan.enableHotspotOnVlan && config.enableUniversalClient)) {
           const vsInt = parseIpv4ToInt(vlan.poolStart);
           const veInt = parseIpv4ToInt(vlan.poolEnd);
           if (vsInt === null || veInt === null) {
