@@ -5,6 +5,12 @@
     color-scheme: dark;
   }
 
+  @media (min-width: 768px) {
+    html {
+      scroll-padding-top: 96px;
+    }
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: #334155 #020617;

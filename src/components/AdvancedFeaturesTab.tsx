@@ -616,13 +616,21 @@ export default function AdvancedFeaturesTab({ config, profiles, onChange, lang }
               size="sm"
               checked={config.generateVouchersBatch}
               onChange={(checked) => {
-                if (checked && (!config.voucherCodes || config.voucherCodes.length !== (config.voucherCount || 20))) {
-                  onChange({
-                    generateVouchersBatch: true,
-                    voucherCodes: generateCryptoVoucherCodes(config.voucherCount || 20, config.voucherLength || 4),
-                  });
+                if (checked) {
+                  const updates: Partial<HotspotConfig> = { generateVouchersBatch: true };
+                  if (!config.voucherCodes || config.voucherCodes.length !== (config.voucherCount || 20)) {
+                    updates.voucherCodes = generateCryptoVoucherCodes(config.voucherCount || 20, config.voucherLength || 4);
+                  }
+                  const targetProfiles = effectiveVoucherTarget === "userman" ? umProfiles : profiles;
+                  if (
+                    targetProfiles.length > 0 &&
+                    !targetProfiles.some((p) => p.name === config.voucherSelectedProfile)
+                  ) {
+                    updates.voucherSelectedProfile = targetProfiles[0].name;
+                  }
+                  onChange(updates);
                 } else {
-                  onChange({ generateVouchersBatch: checked });
+                  onChange({ generateVouchersBatch: false });
                 }
               }}
               ariaLabel={isAr ? "تفعيل توليد دفعة الكروت" : "Enable Batch Voucher Generator"}

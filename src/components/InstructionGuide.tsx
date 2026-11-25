@@ -570,7 +570,7 @@ export default function InstructionGuide({
     {
       topicAr: "تصفير الكوتا الدوري (شهري/يومي)",
       topicEn: "Recurring Quota Reset",
-      v6: "غير متاح مدمجاً (يحتاج Scheduler)",
+      v6: isAr ? "غير متاح مدمجاً (يحتاج Scheduler)" : "Not built-in (needs Scheduler script)",
       v7: "reset-counters-interval (monthly/weekly/daily)",
     },
     {
@@ -588,7 +588,7 @@ export default function InstructionGuide({
     {
       topicAr: "جداول التوجيه في Multi-WAN",
       topicEn: "Policy Routing Tables",
-      v6: "routing-mark مباشر في Mangle/Route",
+      v6: isAr ? "routing-mark مباشر في Mangle/Route" : "Direct routing-mark in Mangle/Route",
       v7: "/routing table add fib + routing-table=",
     },
   ];

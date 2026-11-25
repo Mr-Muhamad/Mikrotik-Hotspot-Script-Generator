@@ -213,7 +213,7 @@ const ScriptViewer = memo(function ScriptViewer({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <select
             id="script-section-jump"
             name="scriptSectionJump"
@@ -223,7 +223,7 @@ const ScriptViewer = memo(function ScriptViewer({
               handleJumpToSection(e.target.value);
               e.target.value = "";
             }}
-            className="flex-1 min-h-[44px] sm:min-h-[36px] bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs sm:max-w-[200px]"
+            className="flex-1 min-w-0 w-full truncate min-h-[44px] sm:min-h-[36px] bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs sm:max-w-[200px]"
           >
             <option value="" disabled>
               {isAr ? "الانتقال إلى قسم..." : "Jump to section..."}
