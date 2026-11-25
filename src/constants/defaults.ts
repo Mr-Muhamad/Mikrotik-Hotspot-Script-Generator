@@ -436,6 +436,8 @@ export const DEFAULT_CONFIG: HotspotConfig = {
   enableFirewallHardening: true,
   blockWanManagement: true,
   blockHotspotRouterAccess: true,
+  enableDhcpSnooping: true,
+  enableLoopProtect: true,
   serviceTelnet: false,
   serviceFtp: false,
   serviceWww: true,
@@ -654,6 +656,10 @@ export function hydrateConfig(raw: unknown): HotspotConfig {
     typeof raw.forceDnsRedirect === "boolean" ? raw.forceDnsRedirect : DEFAULT_CONFIG.forceDnsRedirect;
   merged.clampTcpMss =
     typeof raw.clampTcpMss === "boolean" ? raw.clampTcpMss : DEFAULT_CONFIG.clampTcpMss;
+  merged.enableDhcpSnooping =
+    typeof raw.enableDhcpSnooping === "boolean" ? raw.enableDhcpSnooping : DEFAULT_CONFIG.enableDhcpSnooping;
+  merged.enableLoopProtect =
+    typeof raw.enableLoopProtect === "boolean" ? raw.enableLoopProtect : DEFAULT_CONFIG.enableLoopProtect;
 
   if (typeof raw.disableUnusedServices === "boolean" && typeof raw.serviceApi !== "boolean") {
     const enabledLegacy = !raw.disableUnusedServices;

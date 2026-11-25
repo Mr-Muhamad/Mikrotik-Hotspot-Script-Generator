@@ -12,11 +12,12 @@ import ToggleSwitch from "./ToggleSwitch";
 interface Props {
   config: HotspotConfig;
   onChange: (updates: Partial<HotspotConfig>) => void;
+  onNavigateTab?: (tab: number) => void;
   lang: "ar" | "en";
   issues?: ValidationIssue[];
 }
 
-export default function AdvancedFeaturesTab({ config, onChange, lang, issues = [] }: Props) {
+export default function AdvancedFeaturesTab({ config, onChange, onNavigateTab, lang, issues = [] }: Props) {
   const isAr = lang === "ar";
   const isV7 = config.rosVersion === "v7";
   const [newDomain, setNewDomain] = useState("");
@@ -260,6 +261,90 @@ export default function AdvancedFeaturesTab({ config, onChange, lang, issues = [
               <span>{isAr ? "منع مشاركة الإنترنت عبر الراوترات (TTL=1)" : "Anti-Sharing: Force TTL=1"}</span>
             </label>
           </div>
+        </div>
+
+        {/* Access Point & Layer-2 Switch Protection (Anti-Rogue DHCP & Loop Protect) */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
+              <Network className="w-4 h-4 text-slate-400" aria-hidden="true" />
+              {isAr ? "حماية الشبكة الداخلية من كوارث الأكسس بوينت والـ Switch" : "LAN Access Point & Switch Protection (L2)"}
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {isAr
+                ? "يحمي شبكة المشتركين من توصيل راوتر فرعي يوزع IP خطأ (Rogue DHCP) أو توصيل كابلين ببعضهما يسبب شلل الشبكة (Loop)."
+                : "Protects subscribers from miswired APs handing out rogue DHCP leases and from Layer-2 switching loops."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/60 text-xs">
+            <label
+              htmlFor="adv-dhcp-snooping"
+              className="min-h-[44px] flex items-start gap-2.5 bg-slate-950/50 p-3 rounded-lg border border-slate-800 cursor-pointer hover:bg-slate-800/60 transition"
+            >
+              <input
+                id="adv-dhcp-snooping"
+                name="enableDhcpSnooping"
+                type="checkbox"
+                className="w-4 h-4 flex-shrink-0 mt-0.5 accent-emerald-500"
+                checked={config.enableDhcpSnooping !== false}
+                onChange={(e) => onChange({ enableDhcpSnooping: e.target.checked })}
+              />
+              <span className="leading-relaxed">
+                <strong className="text-slate-100 block">
+                  {isAr ? "منع توزيع DHCP غريب (Anti-Rogue DHCP)" : "Block Rogue DHCP Servers (DHCP Snooping)"}
+                </strong>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  {isAr
+                    ? "يفعّل dhcp-snooping=yes على الـ Bridge (المنافذ trusted=no) ويحظر عروض DHCP الغريبة (Port 67->68)."
+                    : "Enables bridge dhcp-snooping=yes (trusted=no on access ports) and drops rogue DHCP offers."}
+                </span>
+              </span>
+            </label>
+
+            <label
+              htmlFor="adv-loop-protect"
+              className="min-h-[44px] flex items-start gap-2.5 bg-slate-950/50 p-3 rounded-lg border border-slate-800 cursor-pointer hover:bg-slate-800/60 transition"
+            >
+              <input
+                id="adv-loop-protect"
+                name="enableLoopProtect"
+                type="checkbox"
+                className="w-4 h-4 flex-shrink-0 mt-0.5 accent-emerald-500"
+                checked={config.enableLoopProtect !== false}
+                onChange={(e) => onChange({ enableLoopProtect: e.target.checked })}
+              />
+              <span className="leading-relaxed">
+                <strong className="text-slate-100 block">
+                  {isAr ? "منع التوصيل الحلقي (Loop Protect & RSTP)" : "Loop Protect & Bridge RSTP"}
+                </strong>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  {isAr
+                    ? "يفعّل loop-protect=on (إيقاف مؤقت 5m عند اللوب) على منافذ الخروج LAN مع RSTP على الـ Bridge بدون لمس WAN."
+                    : "Enables loop-protect=on (5m auto-disable) on LAN Ethernet ports plus bridge RSTP while leaving WAN untouched."}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {!config.useLanBridge && config.enableDhcpSnooping !== false && (
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-2 text-[11px] text-slate-300">
+              <span>
+                {isAr
+                  ? "ملاحظة: الحماية الكاملة ضد توزيع راوترات العملاء لعناوين IP (L2 DHCP Snooping) تعمل على LAN Bridge؛ حالياً يتم حظر عروض DHCP الواردة للراوتر فقط."
+                  : "Tip: Full client-to-client L2 DHCP Snooping requires LAN Bridge; currently router input DHCP-offer blocking is active."}
+              </span>
+              {onNavigateTab && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab(0)}
+                  className="min-h-[36px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 rounded-md font-semibold transition flex-shrink-0"
+                >
+                  {isAr ? "تفعيل LAN Bridge من الشبكة" : "Enable LAN Bridge"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Granular RouterOS Services (/ip service) */}

@@ -281,6 +281,8 @@ export interface HotspotConfig {
   enableFirewallHardening: boolean;
   blockWanManagement: boolean;
   blockHotspotRouterAccess: boolean;
+  enableDhcpSnooping: boolean;
+  enableLoopProtect: boolean;
   serviceTelnet: boolean;
   serviceFtp: boolean;
   serviceWww: boolean;

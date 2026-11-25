@@ -79,30 +79,45 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
   script += `# 1. Interface, LAN Bridge & WAN Lines Setup / إعدادات الكروت والإنترنت\n`;
   script += `# ---------------------------------------------------------------------\n`;
 
+  const loopProtectClause =
+    config.enableLoopProtect !== false
+      ? " loop-protect=on loop-protect-send-interval=5s loop-protect-disable-time=5m"
+      : " loop-protect=off";
+
   const commentedPhysicalIfaces = new Set<string>();
   if (isPhysicalInterface(wanIface)) {
     script += `:if ([:len [/interface ethernet find default-name="${wanIface}"]] > 0) do={ /interface ethernet set [ find default-name="${wanIface}" ] name=${wanIface} comment="Primary WAN Input / كارت دخول الإنترنت الرئيسي" }\n`;
     commentedPhysicalIfaces.add(wanIface);
   }
-  if (!config.useLanBridge && isPhysicalInterface(lanIface) && !commentedPhysicalIfaces.has(lanIface)) {
-    script += `:if ([:len [/interface ethernet find default-name="${lanIface}"]] > 0) do={ /interface ethernet set [ find default-name="${lanIface}" ] name=${lanIface} comment="LAN - Hotspot Output / كارت خروج المشتركين" }\n`;
-    commentedPhysicalIfaces.add(lanIface);
-  }
+  const lanPhysicalPorts = config.useLanBridge
+    ? bridgePorts.filter((port) => isPhysicalInterface(port) && !commentedPhysicalIfaces.has(port))
+    : isPhysicalInterface(lanIface) && !commentedPhysicalIfaces.has(lanIface)
+      ? [lanIface]
+      : [];
+  lanPhysicalPorts.forEach((port) => {
+    const portComment = config.useLanBridge
+      ? "Hotspot LAN Bridge Member"
+      : "LAN - Hotspot Output / كارت خروج المشتركين";
+    script += `:if ([:len [/interface ethernet find default-name="${port}"]] > 0) do={ /interface ethernet set [ find default-name="${port}" ] name=${port}${loopProtectClause} comment="${portComment}" }\n`;
+    commentedPhysicalIfaces.add(port);
+  });
   if (commentedPhysicalIfaces.size > 0) {
     script += `\n`;
   }
 
   if (config.useLanBridge) {
+    const dhcpSnoopFlag = config.enableDhcpSnooping !== false ? "yes" : "no";
+    const bridgeTrustedAttr = config.enableDhcpSnooping !== false ? " trusted=no" : "";
     script += `/interface bridge remove [ find name="${escapeRosString(effectiveLan)}" ]\n`;
     script += `/interface bridge\n`;
-    script += `add name="${escapeRosString(effectiveLan)}" vlan-filtering=no comment="Hotspot LAN Bridge"\n`;
+    script += `add name="${escapeRosString(effectiveLan)}" protocol-mode=rstp dhcp-snooping=${dhcpSnoopFlag} vlan-filtering=no comment="Hotspot LAN Bridge"\n`;
     if (bridgePorts.length > 0) {
       bridgePorts.forEach((port) => {
         script += `/interface bridge port remove [ find interface=${port} ]\n`;
       });
       script += `/interface bridge port\n`;
       bridgePorts.forEach((port) => {
-        script += `add bridge="${escapeRosString(effectiveLan)}" interface=${port}\n`;
+        script += `add bridge="${escapeRosString(effectiveLan)}" interface=${port}${bridgeTrustedAttr}\n`;
       });
     }
     script += `\n`;

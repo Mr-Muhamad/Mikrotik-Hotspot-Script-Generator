@@ -1039,6 +1039,8 @@ test("End-to-End RouterOS .rsc structural & syntax verification across 24 featur
           enableUniversalClient: i % 2 === 1,
           forceDnsRedirect: i % 3 !== 2,
           clampTcpMss: i % 4 !== 3,
+          enableDhcpSnooping: i % 3 !== 1,
+          enableLoopProtect: i % 4 !== 2,
         });
 
         const script = generateMikrotikScript(cfg, baseRichProfiles);
@@ -1297,4 +1299,73 @@ test("Captive Portal HTML prevents iOS auto-zoom, disables autocapitalize, expos
     assert.ok(btnContrast >= 4.5, `${theme} submit-btn contrast too low: ${btnContrast.toFixed(2)}:1`);
     assert.ok(linkContrast >= 4.5, `${theme} link contrast too low: ${linkContrast.toFixed(2)}:1`);
   }
+});
+
+test("Anti-Rogue DHCP Snooping and Loop Protect harden LAN bridge & ethernet ports without touching WAN", () => {
+  const bridgeProtected = generateMikrotikScript(
+    makeBaseConfig({
+      rosVersion: "v7",
+      useLanBridge: true,
+      lanBridgeName: "bridge-lan",
+      lanBridgePorts: "ether2,ether3,ether4",
+      enableDhcpSnooping: true,
+      enableLoopProtect: true,
+    }),
+    sampleHotspotProfiles
+  );
+
+  // Bridge has RSTP and DHCP Snooping enabled; access ports explicitly marked trusted=no
+  assert.match(
+    bridgeProtected,
+    /add name="bridge-lan" protocol-mode=rstp dhcp-snooping=yes vlan-filtering=no/
+  );
+  assert.match(
+    bridgeProtected,
+    /add bridge="bridge-lan" interface=ether2 trusted=no/
+  );
+  assert.match(
+    bridgeProtected,
+    /add bridge="bridge-lan" interface=ether3 trusted=no/
+  );
+  // Loop Protect applied to LAN ports only, never to WAN ether1
+  assert.match(
+    bridgeProtected,
+    /\[ find default-name="ether2" \] name=ether2 loop-protect=on loop-protect-send-interval=5s loop-protect-disable-time=5m/
+  );
+  assert.match(
+    bridgeProtected,
+    /\[ find default-name="ether3" \] name=ether3 loop-protect=on loop-protect-send-interval=5s loop-protect-disable-time=5m/
+  );
+  assert.doesNotMatch(
+    bridgeProtected,
+    /\[ find default-name="ether1" \] name=ether1 loop-protect=/
+  );
+  // Rogue DHCP Server reply guard on Hotspot input above inDrop
+  assert.match(
+    bridgeProtected,
+    /add action=drop chain=input protocol=udp src-port=67 dst-port=68 in-interface=bridge-lan comment="Drop Rogue DHCP Server Offers on Hotspot LAN" place-before=\$inDrop/
+  );
+
+  // Disabled state emits explicit safe revert flags
+  const unprotected = generateMikrotikScript(
+    makeBaseConfig({
+      useLanBridge: true,
+      lanBridgeName: "bridge-lan",
+      lanBridgePorts: "ether2",
+      enableDhcpSnooping: false,
+      enableLoopProtect: false,
+    }),
+    sampleHotspotProfiles
+  );
+  assert.match(unprotected, /add name="bridge-lan" protocol-mode=rstp dhcp-snooping=no vlan-filtering=no/);
+  assert.match(unprotected, /\[ find default-name="ether2" \] name=ether2 loop-protect=off/);
+  assert.doesNotMatch(unprotected, /add action=drop chain=input[^\n]*Drop Rogue DHCP Server Offers on Hotspot LAN/);
+
+  // Hydration preserves defaults and explicit booleans
+  const hDefault = hydrateConfig({});
+  assert.equal(hDefault.enableDhcpSnooping, true);
+  assert.equal(hDefault.enableLoopProtect, true);
+  const hDisabled = hydrateConfig({ enableDhcpSnooping: false, enableLoopProtect: false });
+  assert.equal(hDisabled.enableDhcpSnooping, false);
+  assert.equal(hDisabled.enableLoopProtect, false);
 });

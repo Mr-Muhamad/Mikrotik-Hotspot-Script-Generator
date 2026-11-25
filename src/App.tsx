@@ -18,6 +18,7 @@ import { generateHotspotPortalFiles } from "./utils/htmlTemplateGenerator";
 import { validateConfiguration } from "./utils/validation";
 import { buildDeploymentReadme, createZipBlob, stripConfigSecrets } from "./utils/zipExporter";
 import { handleTabListKeyDown } from "./utils/tabKeyboard";
+import { registerOfflinePwa, type BeforeInstallPromptEvent } from "./utils/pwa";
 import NetworkConfigTab from "./components/NetworkConfigTab";
 import ScriptViewer from "./components/ScriptViewer";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -45,7 +46,10 @@ import {
   Network,
   RefreshCw,
   ShieldCheck,
+  Smartphone,
   Upload,
+  Wifi,
+  WifiOff,
   Zap,
   Layout,
 } from "lucide-react";
@@ -84,11 +88,47 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState<boolean>(false);
   const [issuesOpen, setIssuesOpen] = useState<boolean>(true);
   const [mobileBundleConfirm, setMobileBundleConfirm] = useState<boolean>(false);
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
+  const [offlineReady, setOfflineReady] = useState<boolean>(false);
+  const [pwaApplyUpdate, setPwaApplyUpdate] = useState<(() => void) | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
 
   const isAr = lang === "ar";
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+    const handleInstalled = () => setInstallPrompt(null);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    registerOfflinePwa({
+      onOfflineReady: () => setOfflineReady(true),
+      onNeedRefresh: (applyFn) => {
+        setOfflineReady(true);
+        setPwaApplyUpdate(() => applyFn);
+      },
+    });
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -483,6 +523,22 @@ export default function App() {
               <span>{isAr ? "English" : "العربية"}</span>
             </button>
 
+            {installPrompt && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const promptEvent = installPrompt;
+                  setInstallPrompt(null);
+                  await promptEvent.prompt();
+                }}
+                className="min-h-[44px] sm:min-h-[40px] justify-center flex items-center gap-1.5 text-xs px-2.5 sm:px-3 py-2 bg-emerald-950/70 hover:bg-emerald-900/70 text-emerald-300 border border-emerald-700 rounded-xl transition font-medium"
+                title={isAr ? "تثبيت الأداة للعمل بدون إنترنت" : "Install app for offline field use"}
+              >
+                <Smartphone className="w-4 h-4" aria-hidden="true" />
+                <span>{isAr ? "تثبيت التطبيق" : "Install App"}</span>
+              </button>
+            )}
+
             {/* Clear All */}
             <button
               onClick={() => setConfirmAction("resetAll")}
@@ -562,6 +618,25 @@ export default function App() {
                       : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
               </span>
             </div>
+            {(!isOnline || offlineReady) && (
+              <div className="flex items-center gap-1.5">
+                {!isOnline ? (
+                  <>
+                    <WifiOff className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                    <span className="font-semibold text-amber-300">
+                      {isAr ? "أوفلاين (يعمل محلياً)" : "Offline (Local Mode)"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Wifi className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                    <span className="font-medium text-emerald-300">
+                      {isAr ? "جاهز أوفلاين" : "Offline Ready"}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -668,9 +743,25 @@ export default function App() {
 
       {/* Main Content Dashboard */}
       <main ref={mainRef} className="flex-1 max-w-7xl w-full mx-auto p-4 pb-24 md:p-6 md:pb-24 lg:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Notices (storage warning or import feedback) */}
-        {(storageWarning || importNotice) && (
+        {/* Notices (PWA update, storage warning, or import feedback) */}
+        {(pwaApplyUpdate || storageWarning || importNotice) && (
           <div className="lg:col-span-12 space-y-2">
+            {pwaApplyUpdate && (
+              <div role="status" className="bg-emerald-950/60 border border-emerald-700 text-emerald-100 text-xs rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {isAr
+                    ? "يتوفر تحديث جديد للأداة جاهز للاستخدام بدون إنترنت."
+                    : "A new offline-cached version of this tool is ready."}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => pwaApplyUpdate()}
+                  className="min-h-[36px] px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg transition"
+                >
+                  {isAr ? "تحديث الآن" : "Update Now"}
+                </button>
+              </div>
+            )}
             {storageWarning && (
               <div role="status" className="bg-amber-950/60 border border-amber-700 text-amber-200 text-xs rounded-xl px-4 py-2.5 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0" aria-hidden="true" />
@@ -816,6 +907,7 @@ export default function App() {
                   <AdvancedFeaturesTab
                     config={config}
                     onChange={handleConfigChange}
+                    onNavigateTab={requestTabChange}
                     lang={lang}
                     issues={validationIssues}
                   />

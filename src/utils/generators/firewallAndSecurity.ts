@@ -40,7 +40,7 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
   // Clean previously generated firewall filter rules (!dynamic protects dynamic Hotspot chains)
   script += `/ip firewall filter remove [ find where !dynamic and (comment="Drop Invalid Forward Packets" or comment="Isolate VLANs & Main LAN from Each Other" or comment="Bypass FastTrack for Hotspot Upload" or comment="Bypass FastTrack for Hotspot Download" or comment="Bypass FastTrack for Multi-WAN Mangle") ]\n`;
   script += `/ip firewall filter remove [ find where !dynamic and (comment="Accept Established/Related Input" or comment="Drop Invalid Input Packets" or comment="Allow Localhost Loopback (RADIUS & CoA)" or comment="Allow Incoming RADIUS CoA" or comment="Block Hotspot Clients from Router Management Ports" or comment="Block Hotspot Clients from WebFig on Non-Portal IPs") ]\n`;
-  script += `/ip firewall filter remove [ find where !dynamic and (comment="Allow Hotspot LAN/VLAN DNS & DHCP" or comment="Allow Hotspot LAN/VLAN DNS TCP" or comment="Allow Hotspot Captive Portal HTTP/HTTPS" or comment="Drop WAN DNS UDP" or comment="Drop WAN DNS TCP" or comment="Drop SSH Brute Force Blacklist" or comment="SSH Brute Force Blacklist" or comment="SSH Brute Force Stage 2" or comment="SSH Brute Force Stage 1" or comment="Drop All Unsolicited Input from WAN (Protects Winbox/WebFig/SSH)") ]\n`;
+  script += `/ip firewall filter remove [ find where !dynamic and (comment="Drop Rogue DHCP Server Offers on Hotspot LAN" or comment="Allow Hotspot LAN/VLAN DNS & DHCP" or comment="Allow Hotspot LAN/VLAN DNS TCP" or comment="Allow Hotspot Captive Portal HTTP/HTTPS" or comment="Drop WAN DNS UDP" or comment="Drop WAN DNS TCP" or comment="Drop SSH Brute Force Blacklist" or comment="SSH Brute Force Blacklist" or comment="SSH Brute Force Stage 2" or comment="SSH Brute Force Stage 1" or comment="Drop All Unsolicited Input from WAN (Protects Winbox/WebFig/SSH)") ]\n`;
 
   script += `/ip firewall filter\n`;
 
@@ -108,6 +108,11 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
   }
 
   const lanInputMatcher = hasVlans ? `in-interface-list=HOTSPOT_LAN` : `in-interface=${effectiveLan}`;
+  if (config.enableDhcpSnooping !== false) {
+    inputPreDropRules.push(
+      `add action=drop chain=input protocol=udp src-port=67 dst-port=68 ${lanInputMatcher} comment="Drop Rogue DHCP Server Offers on Hotspot LAN"`
+    );
+  }
   inputPreDropRules.push(
     `add action=accept chain=input protocol=udp dst-port=53,67 ${lanInputMatcher} comment="Allow Hotspot LAN/VLAN DNS & DHCP"`,
     `add action=accept chain=input protocol=tcp dst-port=53 ${lanInputMatcher} comment="Allow Hotspot LAN/VLAN DNS TCP"`,
