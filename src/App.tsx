@@ -32,6 +32,7 @@ const InstructionGuide = lazy(() => import("./components/InstructionGuide"));
 
 import {
   AlertTriangle,
+  Archive,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -82,6 +83,7 @@ export default function App() {
   const [pendingTab, setPendingTab] = useState<number | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState<boolean>(false);
   const [issuesOpen, setIssuesOpen] = useState<boolean>(true);
+  const [mobileBundleConfirm, setMobileBundleConfirm] = useState<boolean>(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -114,6 +116,21 @@ export default function App() {
       return;
     }
     setActiveTab(nextTab);
+  };
+
+  const focusValidationField = (tab: number, field?: string) => {
+    requestTabChange(tab);
+    if (!field || hasUnsavedDraft) return;
+    window.setTimeout(() => {
+      const panel = document.getElementById(`tab-panel-${tab}`);
+      if (!panel) return;
+      const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(field) : field.replace(/["\\]/g, "\\$&");
+      const target = panel.querySelector(`[name="${escaped}"], #${escaped}`);
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.focus();
+      }
+    }, 90);
   };
 
   // Sync document lang & dir with active UI language
@@ -281,34 +298,57 @@ export default function App() {
 
   const effectiveAuthMode = config.authMode || (config.enableUserManager ? "userman_radius" : "hotspot_only");
   const isExternalRadius = effectiveAuthMode !== "hotspot_only" && config.radiusBackend === "external_radius";
-  const authModeLabel =
-    effectiveAuthMode === "hotspot_only"
-      ? (isAr ? "هوتسبوت محلي فقط" : "Hotspot Only")
-      : isExternalRadius
-        ? (effectiveAuthMode === "hybrid"
-            ? (isAr ? "هجين (RADIUS خارجي)" : "Hybrid (External RADIUS)")
-            : (isAr ? "RADIUS خارجي مستقل" : "External RADIUS"))
-        : effectiveAuthMode === "hybrid"
-          ? (isAr ? "وضع هجين (Hotspot + UM)" : "Hybrid Mode")
-          : (isAr ? "يوزر مانجر RADIUS" : "User Manager RADIUS");
+
+  const executeDownloadBundle = () => {
+    const safeServer = config.serverName || "hotspot1";
+    const scriptFilename = `hotspot_setup_${config.rosVersion}_${safeServer}.rsc`;
+    const htmlFolder = config.storageMode === "flash" ? "flash/hotspot" : (config.htmlDirectory || "hotspot");
+    const portalFiles = generateHotspotPortalFiles(config, lang);
+    const readmeTxt = buildDeploymentReadme(config, scriptFilename, lang);
+    const blob = createZipBlob([
+      { path: scriptFilename, content: generatedScript },
+      ...(Object.entries(portalFiles) as [string, string][]).map(([name, content]) => ({
+        path: `${htmlFolder}/${name}`,
+        content,
+      })),
+      { path: "README_DEPLOY.txt", content: readmeTxt },
+    ]);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mikrotik_bundle_${config.rosVersion}_${safeServer}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleMobileBundleClick = () => {
+    if (errorCount > 0 || hasUnsavedDraft) {
+      setMobileBundleConfirm(true);
+      return;
+    }
+    executeDownloadBundle();
+  };
+
+  const authModeOptions: Array<{ id: "userman_radius" | "hotspot_only" | "hybrid"; label: string }> = [
+    { id: "userman_radius", label: isAr ? "يوزر مانجر / RADIUS" : "UM / RADIUS" },
+    { id: "hotspot_only", label: isAr ? "هوتسبوت محلي" : "Hotspot Only" },
+    { id: "hybrid", label: isAr ? "هجين" : "Hybrid" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans" dir={isAr ? "rtl" : "ltr"}>
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-4 py-3 md:px-6 md:py-3.5 md:sticky md:top-0 z-40">
+      <header className="border-b border-slate-800 bg-slate-900/95 px-4 py-3 md:px-6 md:py-3.5 md:sticky md:top-0 z-40">
         <div className="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 sm:p-2.5 bg-emerald-950 border border-emerald-700 rounded-xl text-emerald-400 shadow-md flex-shrink-0">
+            <div className="p-2 sm:p-2.5 bg-emerald-950 border border-emerald-700 rounded-xl text-emerald-400 flex-shrink-0">
               <Cpu className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-100 flex items-center flex-wrap gap-2">
-                <span>
-                  {isAr ? "مولد سكربت ميكروتيك هوت سبوت الشامل" : "MikroTik Hotspot & Master Script Generator"}
-                </span>
-                <span className="text-xs bg-emerald-950 border border-emerald-700 text-emerald-300 px-2.5 py-0.5 rounded-full font-mono font-bold">
-                  ROS {config.rosVersion.toUpperCase()}
-                </span>
+              <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-100">
+                {isAr ? "مولد سكربت ميكروتيك هوت سبوت الشامل" : "MikroTik Hotspot & Master Script Generator"}
               </h1>
               <p className="hidden sm:block text-xs text-slate-400 mt-0.5">
                 {isAr
@@ -445,7 +485,7 @@ export default function App() {
       </header>
 
       {/* Main Content Dashboard */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 pb-24 md:p-6 md:pb-24 lg:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Notices (storage warning or import feedback) */}
         {(storageWarning || importNotice) && (
           <div className="lg:col-span-12 space-y-2">
@@ -470,47 +510,70 @@ export default function App() {
           </div>
         )}
 
-        {/* Full-Width Status Strip + Zero-Clip Navigation Bar */}
+        {/* Architecture & Mode Quick Bar + Zero-Clip Navigation Bar */}
         <div className="lg:col-span-12 space-y-3">
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-x-5 gap-y-1.5 text-xs">
-            <div className="flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-              <span className="text-slate-400">{isAr ? "النظام:" : "Target:"}</span>
-              <span className="font-mono font-semibold text-emerald-400">RouterOS {config.rosVersion.toUpperCase()}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-              <span className="text-slate-400">{isAr ? "الدمج:" : "Multi-WAN:"}</span>
-              <span className={`font-mono font-semibold ${config.loadBalancingMethod !== "none" ? "text-emerald-400" : "text-slate-300"}`}>
-                {config.loadBalancingMethod !== "none" ? config.loadBalancingMethod.toUpperCase() : (isAr ? "خط واحد" : "Single WAN")}
+          <div className="bg-slate-900/70 border border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
+                <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                <span>{isAr ? "نمط الإدارة:" : "Mode:"}</span>
               </span>
+              <div
+                role="group"
+                aria-label={isAr ? "نمط الإدارة" : "Auth Mode"}
+                className="inline-flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-700"
+              >
+                {authModeOptions.map((opt) => {
+                  const selected = effectiveAuthMode === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => handleConfigChange({ authMode: opt.id })}
+                      className={`min-h-[44px] sm:min-h-[34px] px-2.5 py-1 rounded-lg text-xs transition ${
+                        selected
+                          ? "bg-emerald-500 text-slate-950 font-bold"
+                          : "text-slate-300 hover:text-white hover:bg-slate-800/70 font-medium"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-              <span className="text-slate-400">VLANs:</span>
-              <span dir={config.enableVlans ? "ltr" : undefined} className={`font-mono font-semibold ${config.enableVlans ? "text-emerald-400" : "text-slate-300"}`}>
-                {config.enableVlans ? `${config.vlans?.length || 0} VLANs` : (isAr ? "معطّل" : "Disabled")}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-              <span className="text-slate-400">{isAr ? "نمط المشتركين:" : "Auth Mode:"}</span>
-              <span className="font-mono font-semibold text-emerald-400">
-                {authModeLabel}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Gauge className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-              <span className="text-slate-400">{isAr ? "الباقات:" : "Plans:"}</span>
-              <span dir="ltr" className="font-mono font-semibold text-slate-200 inline-block">
-                {effectiveAuthMode === "hotspot_only"
-                  ? `${hotspotProfiles.length} HS`
-                  : isExternalRadius
-                    ? (effectiveAuthMode === "hybrid" ? `${hotspotProfiles.length} HS / Ext RADIUS` : "External RADIUS")
-                    : effectiveAuthMode === "userman_radius"
-                      ? `${config.umProfiles?.length || 0} UM`
-                      : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
-              </span>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                <span className="text-slate-400">WAN:</span>
+                <span className={`font-mono font-semibold ${config.loadBalancingMethod !== "none" ? "text-emerald-400" : "text-slate-300"}`}>
+                  {config.loadBalancingMethod !== "none"
+                    ? `Multi-WAN (${config.loadBalancingMethod.toUpperCase()})`
+                    : (isAr ? "خط واحد" : "Single WAN")}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                <span className="text-slate-400">VLANs:</span>
+                <span dir={config.enableVlans ? "ltr" : undefined} className={`font-mono font-semibold ${config.enableVlans ? "text-emerald-400" : "text-slate-400"}`}>
+                  {config.enableVlans ? `${config.vlans?.length || 0}` : (isAr ? "معطّل" : "Off")}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                <span className="text-slate-400">{isAr ? "الباقات:" : "Plans:"}</span>
+                <span dir="ltr" className="font-mono font-semibold text-slate-200 inline-block">
+                  {effectiveAuthMode === "hotspot_only"
+                    ? `${hotspotProfiles.length} HS`
+                    : isExternalRadius
+                      ? (effectiveAuthMode === "hybrid" ? `${hotspotProfiles.length} HS / Ext RADIUS` : "External RADIUS")
+                      : effectiveAuthMode === "userman_radius"
+                        ? `${config.umProfiles?.length || 0} UM`
+                        : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -524,13 +587,23 @@ export default function App() {
               name="mobileTabSelect"
               value={activeTab}
               onChange={(e) => requestTabChange(parseInt(e.target.value, 10))}
-              className="w-full min-h-[44px] bg-slate-950 border border-slate-700 text-slate-100 rounded-xl px-3 py-2 text-sm font-medium"
+              className="w-full min-h-[44px] bg-slate-950 border border-slate-600 text-slate-100 rounded-xl px-3 py-2 text-sm font-medium"
             >
-              {tabs.map((tab) => (
-                <option key={tab.id} value={tab.id}>
-                  {tab.label}
-                </option>
-              ))}
+              {tabs.map((tab) => {
+                const tabErrors = validationIssues.filter((i) => i.tab === tab.id && i.severity === "error").length;
+                const tabWarnings = validationIssues.filter((i) => i.tab === tab.id && i.severity === "warning").length;
+                const issueSuffix =
+                  tabErrors > 0
+                    ? ` (${tabErrors} ${isAr ? "أخطاء" : "err"})`
+                    : tabWarnings > 0
+                      ? ` (${tabWarnings} ${isAr ? "تحذير" : "warn"})`
+                      : "";
+                return (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label}{issueSuffix}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -552,8 +625,8 @@ export default function App() {
             {tabs.map((tab) => {
               const TabIcon = tab.icon;
               const isActive = activeTab === tab.id;
-              const hasTabError = validationIssues.some((i) => i.tab === tab.id && i.severity === "error");
-              const hasTabWarning = validationIssues.some((i) => i.tab === tab.id && i.severity === "warning");
+              const tabErrors = validationIssues.filter((i) => i.tab === tab.id && i.severity === "error").length;
+              const tabWarnings = validationIssues.filter((i) => i.tab === tab.id && i.severity === "warning").length;
 
               return (
                 <button
@@ -574,11 +647,22 @@ export default function App() {
                 >
                   <TabIcon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                   <span className="truncate">{tab.shortLabel}</span>
-                  {(hasTabError || hasTabWarning) && (
-                    <span
-                      aria-hidden="true"
-                      className={`w-2 h-2 rounded-full flex-shrink-0 ${hasTabError ? "bg-red-400" : "bg-amber-400"}`}
-                    />
+                  {(tabErrors > 0 || tabWarnings > 0) && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-mono font-bold inline-flex items-center justify-center flex-shrink-0 ${
+                          tabErrors > 0 ? "bg-red-500 text-white" : "bg-amber-400 text-slate-950"
+                        }`}
+                      >
+                        {tabErrors > 0 ? tabErrors : tabWarnings}
+                      </span>
+                      <span className="sr-only">
+                        {tabErrors > 0
+                          ? (isAr ? ` (${tabErrors} أخطاء)` : ` (${tabErrors} errors)`)
+                          : (isAr ? ` (${tabWarnings} تحذيرات)` : ` (${tabWarnings} warnings)`)}
+                      </span>
+                    </>
                   )}
                 </button>
               );
@@ -620,7 +704,7 @@ export default function App() {
                   <li key={issue.id}>
                     <button
                       type="button"
-                      onClick={() => requestTabChange(issue.tab)}
+                      onClick={() => focusValidationField(issue.tab, issue.field)}
                       className="w-full min-h-[44px] sm:min-h-[38px] text-start flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg bg-slate-950/60 hover:bg-slate-900 transition"
                     >
                       <span className={issue.severity === "error" ? "text-red-300" : "text-amber-300"}>
@@ -639,13 +723,13 @@ export default function App() {
 
         {/* Config Parameters Form Column */}
         <div className="lg:col-span-6 flex flex-col">
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-lg lg:h-[720px]">
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-lg">
             {/* Tab Body */}
             <div
               id={`tab-panel-${activeTab}`}
               role="tabpanel"
               aria-labelledby={`tab-btn-${activeTab}`}
-              className="p-4 md:p-6 flex-1 lg:overflow-y-auto"
+              className="p-4 md:p-6 flex-1"
             >
               <Suspense
                 fallback={
@@ -658,6 +742,7 @@ export default function App() {
                   <NetworkConfigTab
                     config={config}
                     onChange={handleConfigChange}
+                    onNavigateTab={requestTabChange}
                     lang={lang}
                     issues={validationIssues}
                   />
@@ -668,6 +753,7 @@ export default function App() {
                     onChange={handleConfigChange}
                     onDirtyChange={setHasUnsavedDraft}
                     lang={lang}
+                    issues={validationIssues}
                   />
                 )}
                 {activeTab === 2 && (
@@ -675,6 +761,7 @@ export default function App() {
                     config={config}
                     onChange={handleConfigChange}
                     lang={lang}
+                    issues={validationIssues}
                   />
                 )}
                 {activeTab === 3 && (
@@ -689,6 +776,7 @@ export default function App() {
                     onNavigateTab={requestTabChange}
                     onDirtyChange={setHasUnsavedDraft}
                     lang={lang}
+                    issues={validationIssues}
                   />
                 )}
                 {activeTab === 4 && (
@@ -699,6 +787,7 @@ export default function App() {
                     onNavigateTab={requestTabChange}
                     onDirtyChange={setHasUnsavedDraft}
                     lang={lang}
+                    issues={validationIssues}
                   />
                 )}
                 {activeTab === 5 && (
@@ -706,6 +795,7 @@ export default function App() {
                     config={config}
                     onChange={handleConfigChange}
                     lang={lang}
+                    issues={validationIssues}
                   />
                 )}
                 {activeTab === 6 && (
@@ -735,40 +825,44 @@ export default function App() {
           lang={lang}
           errorCount={errorCount}
           hasUnsavedDraft={hasUnsavedDraft}
-          onDownloadBundle={() => {
-            const safeServer = config.serverName || "hotspot1";
-            const scriptFilename = `hotspot_setup_${config.rosVersion}_${safeServer}.rsc`;
-            const htmlFolder = config.storageMode === "flash" ? "flash/hotspot" : (config.htmlDirectory || "hotspot");
-            const portalFiles = generateHotspotPortalFiles(config, lang);
-            const readmeTxt = buildDeploymentReadme(config, scriptFilename, lang);
-            const blob = createZipBlob([
-              { path: scriptFilename, content: generatedScript },
-              ...(Object.entries(portalFiles) as [string, string][]).map(([name, content]) => ({
-                path: `${htmlFolder}/${name}`,
-                content,
-              })),
-              { path: "README_DEPLOY.txt", content: readmeTxt },
-            ]);
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `mikrotik_bundle_${config.rosVersion}_${safeServer}.zip`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }}
+          onDownloadBundle={executeDownloadBundle}
         />
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-400 px-4">
+      <footer className="border-t border-slate-800 bg-slate-950 pt-4 pb-20 lg:pb-4 text-center text-xs text-slate-400 px-4">
         <p className="max-w-7xl mx-auto">
           {isAr
             ? "أداة مولد سكربتات ميكروتيك الشاملة (RouterOS v6 & v7) - جميع الحقوق محفوظة 2026."
             : "MikroTik Hotspot, VLANs & Load Balancing Script Generator (v6 & v7) - All Rights Reserved 2026."}
         </p>
       </footer>
+
+      {/* Mobile Bottom Quick-Action Bar */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 border-t border-slate-700 px-3 py-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            document.getElementById("script-viewer-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          className="min-h-[44px] flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 text-xs font-semibold transition"
+        >
+          <span>{isAr ? "معاينة السكربت" : "View Script"}</span>
+          {errorCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white font-mono text-[10px] font-bold">
+              {errorCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={handleMobileBundleClick}
+          className="min-h-[44px] flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition"
+        >
+          <Archive className="w-4 h-4" aria-hidden="true" />
+          <span>{isAr ? "حزمة ZIP" : "ZIP Bundle"}</span>
+        </button>
+      </div>
 
       <ConfirmDialog
         open={confirmAction !== null}
@@ -812,6 +906,51 @@ export default function App() {
           if (target !== null) setActiveTab(target);
         }}
         onCancel={() => setPendingTab(null)}
+      />
+
+      <ConfirmDialog
+        open={mobileBundleConfirm}
+        dir={isAr ? "rtl" : "ltr"}
+        confirmTone="warning"
+        title={
+          errorCount > 0 && hasUnsavedDraft
+            ? (isAr ? "تحذير: أخطاء وتعديلات غير محفوظة" : "Warning: Errors & Unsaved Edits")
+            : hasUnsavedDraft
+              ? (isAr ? "تنبيه: توجد تعديلات غير محفوظة" : "Notice: Unsaved Form Edits")
+              : (isAr ? "تحذير: توجد أخطاء في الإعدادات" : "Warning: Configuration Errors Detected")
+        }
+        description={
+          isAr
+            ? [
+                errorCount > 0
+                  ? `يوجد حالياً ${errorCount} أخطاء في فحص الإعدادات قد تتسبب في فشل /import أو تعطل الشبكة.`
+                  : "",
+                hasUnsavedDraft
+                  ? "يوجد نموذج تعديل مفتوح لم تضغط فيه على (حفظ) بعد، ولن تدخل تغييراته في السكربت الحالي."
+                  : "",
+                "هل تريد المتابعة بالتصدير على أي حال؟",
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : [
+                errorCount > 0
+                  ? `There are ${errorCount} validation error(s) that may cause /import failures on MikroTik.`
+                  : "",
+                hasUnsavedDraft
+                  ? "An edit form is still open without clicking Save, so its draft changes are not included in the exported output."
+                  : "",
+                "Export anyway?",
+              ]
+                .filter(Boolean)
+                .join(" ")
+        }
+        confirmLabel={isAr ? "متابعة التصدير" : "Export Anyway"}
+        cancelLabel={isAr ? "العودة للإصلاح" : "Back to Fix"}
+        onConfirm={() => {
+          setMobileBundleConfirm(false);
+          executeDownloadBundle();
+        }}
+        onCancel={() => setMobileBundleConfirm(false)}
       />
     </div>
   );

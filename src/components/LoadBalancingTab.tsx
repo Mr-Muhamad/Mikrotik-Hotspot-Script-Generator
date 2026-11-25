@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import type { HotspotConfig, LoadBalancingMethod, WanLine } from "../types";
+import type { ValidationIssue } from "../utils/validation";
 import { Eye, EyeOff, Network, Plus, Trash2, Zap } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -12,9 +13,10 @@ interface Props {
   config: HotspotConfig;
   onChange: (updates: Partial<HotspotConfig>) => void;
   lang: "ar" | "en";
+  issues?: ValidationIssue[];
 }
 
-export default function LoadBalancingTab({ config, onChange, lang }: Props) {
+export default function LoadBalancingTab({ config, onChange, lang, issues = [] }: Props) {
   const isAr = lang === "ar";
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [confirmDeleteWan, setConfirmDeleteWan] = useState<WanLine | null>(null);
@@ -202,8 +204,44 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
             </button>
           </div>
 
+          {(() => {
+            const globalIssues = issues.filter(
+              (i) =>
+                i.tab === 2 &&
+                (i.id === "wan_min_lines" ||
+                  i.id.startsWith("wan_dup_canary_") ||
+                  i.id.startsWith("wan_dup_gw_"))
+            );
+            if (globalIssues.length === 0) return null;
+            return (
+              <div className="space-y-1.5">
+                {globalIssues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className={`rounded-lg px-3 py-2 text-xs border ${
+                      issue.severity === "error"
+                        ? "bg-red-950/40 border-red-800/80 text-red-300"
+                        : "bg-amber-950/40 border-amber-800/80 text-amber-300"
+                    }`}
+                  >
+                    {isAr ? issue.messageAr : issue.messageEn}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           <div className="space-y-3">
-            {(config.wanLines || []).map((line, index) => (
+            {(config.wanLines || []).map((line, index) => {
+              const getWanIssue = (fieldName: string) =>
+                issues.find((i) => i.tab === 2 && i.field === `wan_${index}_${fieldName}`);
+              const ifaceError = getWanIssue("interfaceName");
+              const gwError = getWanIssue("gatewayIp");
+              const staticIpError = getWanIssue("staticIp");
+              const pppoeUserError = getWanIssue("pppoeUser");
+              const checkHostError = getWanIssue("checkHost");
+
+              return (
               <div key={line.id} className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-3">
                 <div className="flex justify-between items-center flex-wrap gap-2">
                   <span dir="ltr" className="text-xs font-bold text-emerald-400 font-mono">
@@ -220,7 +258,7 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
                   <div>
                     <label htmlFor={`wan-${line.id}-name`} className="text-xs text-slate-300 mb-1 block">{isAr ? "اسم الخط" : "Line Tag Name"}</label>
                     <input
@@ -237,13 +275,19 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                     <label htmlFor={`wan-${line.id}-iface`} className="text-xs text-slate-300 mb-1 block">{isAr ? "منفذ الكارت (Interface)" : "Router Ethernet Port"}</label>
                     <input
                       id={`wan-${line.id}-iface`}
-                      name={`wanIface_${line.id}`}
+                      name={`wan_${index}_interfaceName`}
                       dir="ltr"
                       type="text"
-                      className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                      aria-invalid={Boolean(ifaceError)}
+                      className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                        ifaceError ? "border-red-500" : "border-slate-700"
+                      }`}
                       value={line.interfaceName}
                       onChange={(e) => handleUpdateWanLine(line.id, { interfaceName: e.target.value })}
                     />
+                    {ifaceError && (
+                      <span className="text-xs text-red-300 mt-1 block">{isAr ? ifaceError.messageAr : ifaceError.messageEn}</span>
+                    )}
                   </div>
                   <div>
                     <label htmlFor={`wan-${line.id}-type`} className="text-xs text-slate-300 mb-1 block">{isAr ? "نوع الاتصال" : "Connection Type"}</label>
@@ -262,20 +306,26 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
                   {line.type === "pppoe" ? (
                     <>
                       <div>
                         <label htmlFor={`wan-${line.id}-pppoe-user`} className="text-xs text-slate-200 mb-1 block">{isAr ? "اسم مستخدم PPPoE" : "PPPoE Username"}</label>
                         <input
                           id={`wan-${line.id}-pppoe-user`}
-                          name={`wanPppoeUser_${line.id}`}
+                          name={`wan_${index}_pppoeUser`}
                           dir="ltr"
                           type="text"
-                          className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                          aria-invalid={Boolean(pppoeUserError)}
+                          className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                            pppoeUserError ? "border-red-500" : "border-slate-700"
+                          }`}
                           value={line.pppoeUser || ""}
                           onChange={(e) => handleUpdateWanLine(line.id, { pppoeUser: e.target.value })}
                         />
+                        {pppoeUserError && (
+                          <span className="text-xs text-red-300 mt-1 block">{isAr ? pppoeUserError.messageAr : pppoeUserError.messageEn}</span>
+                        )}
                       </div>
                       <div>
                         <label htmlFor={`wan-${line.id}-pppoe-pass`} className="text-xs text-slate-200 mb-1 block">{isAr ? "كلمة سر PPPoE" : "PPPoE Password"}</label>
@@ -285,7 +335,7 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                             name={`wanPppoePass_${line.id}`}
                             dir="ltr"
                             type={visiblePasswords[line.id] ? "text" : "password"}
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 pe-10 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 pe-11 sm:pe-10 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
                             value={line.pppoePass || ""}
                             onChange={(e) => handleUpdateWanLine(line.id, { pppoePass: e.target.value })}
                           />
@@ -295,7 +345,7 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                               setVisiblePasswords((prev) => ({ ...prev, [line.id]: !prev[line.id] }))
                             }
                             aria-label={visiblePasswords[line.id] ? (isAr ? "إخفاء كلمة السر" : "Hide password") : (isAr ? "إظهار كلمة السر" : "Show password")}
-                            className="absolute end-1 min-h-[36px] min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
+                            className="absolute end-1 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
                           >
                             {visiblePasswords[line.id] ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                           </button>
@@ -308,13 +358,19 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                         <label htmlFor={`wan-${line.id}-gw`} className="text-xs text-slate-200 mb-1 block">{isAr ? "عنوان الجيتواي للراوتر/المودم" : "Modem Gateway IP"}</label>
                         <input
                           id={`wan-${line.id}-gw`}
-                          name={`wanGw_${line.id}`}
+                          name={`wan_${index}_gatewayIp`}
                           dir="ltr"
                           type="text"
-                          className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                          aria-invalid={Boolean(gwError)}
+                          className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                            gwError ? "border-red-500" : "border-slate-700"
+                          }`}
                           value={line.gatewayIp}
                           onChange={(e) => handleUpdateWanLine(line.id, { gatewayIp: e.target.value })}
                         />
+                        {gwError && (
+                          <span className="text-xs text-red-300 mt-1 block">{isAr ? gwError.messageAr : gwError.messageEn}</span>
+                        )}
                       </div>
 
                       {line.type === "static" && (
@@ -322,14 +378,20 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                           <label htmlFor={`wan-${line.id}-static-ip`} className="text-xs text-slate-200 mb-1 block">{isAr ? "عنوان IP للخط مع القناع (CIDR)" : "Static IP/Mask (CIDR)"}</label>
                           <input
                             id={`wan-${line.id}-static-ip`}
-                            name={`wanStaticIp_${line.id}`}
+                            name={`wan_${index}_staticIp`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={Boolean(staticIpError)}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              staticIpError ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={line.staticIp || ""}
                             onChange={(e) => handleUpdateWanLine(line.id, { staticIp: e.target.value })}
                             placeholder="192.168.1.2/24"
                           />
+                          {staticIpError && (
+                            <span className="text-xs text-red-300 mt-1 block">{isAr ? staticIpError.messageAr : staticIpError.messageEn}</span>
+                          )}
                         </div>
                       )}
                     </>
@@ -340,14 +402,20 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                       <label htmlFor={`wan-${line.id}-check`} className="text-xs text-slate-200 mb-1 block">{isAr ? "هدف الفحص المتكرر (Canary Host)" : "Recursive Ping Target"}</label>
                       <input
                         id={`wan-${line.id}-check`}
-                        name={`wanCheckHost_${line.id}`}
+                        name={`wan_${index}_checkHost`}
                         dir="ltr"
                         type="text"
-                        className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                        aria-invalid={Boolean(checkHostError)}
+                        className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                          checkHostError ? "border-red-500" : "border-slate-700"
+                        }`}
                         value={line.checkHost || ""}
                         onChange={(e) => handleUpdateWanLine(line.id, { checkHost: e.target.value })}
                         placeholder={index % 2 === 0 ? "8.8.8.8" : "1.1.1.1"}
                       />
+                      {checkHostError && (
+                        <span className="text-xs text-red-300 mt-1 block">{isAr ? checkHostError.messageAr : checkHostError.messageEn}</span>
+                      )}
                     </div>
                   )}
 
@@ -406,7 +474,8 @@ export default function LoadBalancingTab({ config, onChange, lang }: Props) {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="space-y-1.5 pt-2">

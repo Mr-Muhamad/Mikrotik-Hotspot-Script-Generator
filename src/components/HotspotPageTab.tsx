@@ -11,6 +11,7 @@ import {
   type PortalPageName,
 } from "../utils/htmlTemplateGenerator";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { handleTabListKeyDown } from "../utils/tabKeyboard";
 import { Layout, Download, Copy, Check, Phone, Type, Palette, Eye, FolderCheck, KeyRound } from "lucide-react";
 
 interface Props {
@@ -62,6 +63,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
       .replace(/form\.submit\(\);/g, "return false;")
       .replace(/action="\$\(link-(?:logout|login|login-only)\)"/g, 'action="#" onsubmit="return false;"')
       .replace(/href="\$\(link-(?:redirect|status|login|login-only)[^"]*"/g, 'href="#" onclick="return false;"')
+      .replace(/href="http:\/\/[^"]*"/g, 'href="#" onclick="return false;"')
       .replace(
         "</head>",
         `<style>html{color-scheme:dark;} body{min-height:auto;padding:20px 14px;}</style></head>`
@@ -162,7 +164,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
         {/* Login Title */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="portal-title" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
-            <Type className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            <Type className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             {isAr ? "عنوان شبكة الهوتسبوت الرئيسي" : "Login Header Title"}
           </label>
           <input
@@ -179,7 +181,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
         {/* Login Subtitle */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="portal-subtitle" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
-            <Type className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            <Type className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             {isAr ? "النص الترحيبي الفرعي" : "Subtitle / Instructions"}
           </label>
           <input
@@ -196,7 +198,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
         {/* Contact Phone */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="portal-phone" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
-            <Phone className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            <Phone className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             {isAr ? "رقم هاتف الدعم الفني" : "Support Contact Phone"}
           </label>
           <input
@@ -214,7 +216,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
         {/* Theme Palette */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="portal-theme" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
-            <Palette className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            <Palette className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             {isAr ? "لون وتصميم الصفحة" : "Color Theme"}
           </label>
           <select
@@ -234,7 +236,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
         {/* Portal Credential Mode */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="portal-login-mode" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            <KeyRound className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             {isAr ? "نمط حقول الدخول في صفحة login.html" : "Portal Credential Fields Mode"}
           </label>
           <select
@@ -261,7 +263,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
         {/* Single-Field Voucher Password Mode */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="portal-voucher-pass-mode" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+            <KeyRound className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             {isAr ? "كلمة مرور خانة الكارت الواحد" : "Single-Field Voucher Password Mode"}
           </label>
           <select
@@ -289,7 +291,12 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
             <Eye className="w-4 h-4 text-emerald-400" aria-hidden="true" />
             {isAr ? "معاينة صفحات البوابة" : "Portal Page Preview"}
           </h3>
-          <div className="flex flex-wrap gap-1.5 bg-slate-900/80 border border-slate-800 rounded-lg p-1" role="tablist" aria-label={isAr ? "اختيار صفحة البوابة" : "Portal Page Selector"}>
+          <div
+            className="flex flex-wrap gap-1.5 bg-slate-900/80 border border-slate-800 rounded-lg p-1"
+            role="tablist"
+            aria-label={isAr ? "اختيار صفحة البوابة" : "Portal Page Selector"}
+            onKeyDown={(e) => handleTabListKeyDown(e, PORTAL_PAGES, selectedPage, setSelectedPage, isAr)}
+          >
             {PORTAL_PAGES.map((page) => {
               const active = selectedPage === page;
               return (
@@ -299,7 +306,7 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setSelectedPage(page)}
-                  className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-mono transition ${
+                  className={`min-h-[44px] sm:min-h-[38px] px-2.5 py-1 rounded-md text-xs font-mono transition ${
                     active
                       ? "bg-emerald-500 text-slate-950 font-semibold shadow-sm"
                       : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"

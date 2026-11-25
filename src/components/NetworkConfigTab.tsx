@@ -14,11 +14,13 @@ interface Props {
   onChange: (updates: Partial<HotspotConfig>) => void;
   lang: "ar" | "en";
   issues?: ValidationIssue[];
+  onNavigateTab?: (tab: number) => void;
 }
 
-export default function NetworkConfigTab({ config, onChange, lang, issues = [] }: Props) {
+export default function NetworkConfigTab({ config, onChange, lang, issues = [], onNavigateTab }: Props) {
   const isAr = lang === "ar";
   const [showPppoePass, setShowPppoePass] = useState(false);
+  const isMultiWanActive = config.loadBalancingMethod !== "none";
 
   const getFieldError = (fieldName: string) =>
     issues.find((i) => i.tab === 0 && i.field === fieldName);
@@ -86,9 +88,9 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* WAN Interface */}
-        <div className="flex flex-col gap-1.5">
+        <div className={`flex flex-col gap-1.5 ${isMultiWanActive ? "opacity-70" : ""}`}>
           <label htmlFor="net-wan-iface" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Globe className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Globe className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "منفذ دخول الإنترنت (WAN)" : "Internet Interface (WAN)"}
           </label>
           <input
@@ -96,20 +98,25 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
             name="wanInterface"
             dir="ltr"
             type="text"
-            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+            disabled={isMultiWanActive}
+            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono disabled:cursor-not-allowed"
             value={config.wanInterface}
             onChange={(e) => onChange({ wanInterface: e.target.value })}
             placeholder="ether1"
           />
           <span className="text-xs text-slate-400">
-            {isAr ? "الكارت المتصل بمودم الإنترنت" : "Interface connected to the external internet modem"}
+            {isMultiWanActive
+              ? (isAr
+                  ? `منافذ الـ WAN مُدارة حالياً بواسطة دمج الخطوط (${config.loadBalancingMethod.toUpperCase()}) في التبويب المخصص.`
+                  : `WAN interfaces are currently managed by Multi-WAN Load Balancing (${config.loadBalancingMethod.toUpperCase()}).`)
+              : (isAr ? "الكارت المتصل بمودم الإنترنت" : "Interface connected to the external internet modem")}
           </span>
         </div>
 
         {/* LAN Interface */}
         <div className={`flex flex-col gap-1.5 ${config.useLanBridge ? "opacity-70" : ""}`}>
           <label htmlFor="net-lan-iface" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "منفذ خروج الهوت سبوت (LAN)" : "Hotspot Output Interface (LAN)"}
           </label>
           <input
@@ -118,7 +125,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
             dir="ltr"
             type="text"
             disabled={config.useLanBridge}
-            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono disabled:cursor-not-allowed"
             value={config.useLanBridge ? config.lanBridgeName : config.lanInterface}
             onChange={(e) => onChange({ lanInterface: e.target.value })}
             placeholder="ether2"
@@ -133,7 +140,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         {/* Gateway IP */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="net-gateway-ip" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Hash className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "عنوان جيتواي الهوت سبوت (IP)" : "Hotspot Gateway IP"}
           </label>
           <input
@@ -161,7 +168,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         {/* Subnet Mask */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="net-subnet-mask" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Hash className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "قناع الشبكة (Subnet Mask)" : "Subnet Mask Prefix"}
           </label>
           <select
@@ -188,7 +195,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         {/* DNS Server Name */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="net-dns-name" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Globe className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Globe className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "رابط صفحة الدخول (DNS Name)" : "DNS Name"}
           </label>
           <input
@@ -209,7 +216,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         {/* Server Name */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="net-server-name" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "اسم سيرفر الهوت سبوت" : "Hotspot Server Name"}
           </label>
           <input
@@ -227,6 +234,33 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
           </span>
         </div>
       </div>
+
+      {isMultiWanActive && (
+        <div className="bg-emerald-950/30 border border-emerald-800/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-emerald-300 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              {isAr
+                ? `دمج الخطوط مفعّل (${config.loadBalancingMethod.toUpperCase()})`
+                : `Multi-WAN Load Balancing Active (${config.loadBalancingMethod.toUpperCase()})`}
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {isAr
+                ? `يتم إدارة منافذ وخطوط الإنترنت (${config.wanLines?.length || 0} خطوط) من تبويب دمج الخطوط بدلاً من إعدادات الخط الوحيد.`
+                : `WAN interfaces and ISP links (${config.wanLines?.length || 0} lines) are configured in the Multi-WAN Load Balancing tab instead of Single WAN mode.`}
+            </p>
+          </div>
+          {onNavigateTab && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab?.(2)}
+              className="shrink-0 min-h-[44px] sm:min-h-[36px] px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition"
+            >
+              {isAr ? "دمج الخطوط (Multi-WAN)" : "Multi-WAN Load Balancing"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* System Identity, Timezone & NTP */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
@@ -334,7 +368,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <label htmlFor="net-single-wan-type" className="text-sm font-medium text-slate-200 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              <Globe className="w-4 h-4 text-slate-400" aria-hidden="true" />
               {isAr ? "نوع اتصال خط الإنترنت الرئيسي (Single WAN)" : "Single WAN Connection Mode"}
             </label>
             <select
@@ -416,7 +450,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
                     name="singleWanPppoePass"
                     dir="ltr"
                     type={showPppoePass ? "text" : "password"}
-                    className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 pe-10 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                    className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 pe-11 sm:pe-10 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
                     value={config.singleWanPppoePass}
                     onChange={(e) => onChange({ singleWanPppoePass: e.target.value })}
                   />
@@ -424,7 +458,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
                     type="button"
                     onClick={() => setShowPppoePass((prev) => !prev)}
                     aria-label={showPppoePass ? (isAr ? "إخفاء كلمة السر" : "Hide password") : (isAr ? "إظهار كلمة السر" : "Show password")}
-                    className="absolute end-1 min-h-[36px] min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
+                    className="absolute end-1 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
                   >
                     {showPppoePass ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                   </button>
@@ -489,7 +523,7 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="net-storage-mode" className="text-slate-300 text-xs flex items-center gap-1.5">
-              <HardDrive className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+              <HardDrive className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
               {isAr ? "مسار ملفات صفحة الدخول (HTML Storage)" : "Hotspot HTML Storage Path"}
             </label>
             <select
@@ -597,6 +631,29 @@ export default function NetworkConfigTab({ config, onChange, lang, issues = [] }
             <span>MAC Auth</span>
           </label>
         </div>
+
+        {config.enableCookie && (
+          <div className="pt-3 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center gap-2.5">
+            <label htmlFor="net-cookie-lifetime" className="text-slate-200 text-xs font-medium shrink-0">
+              {isAr ? "صلاحية كوكيز تسجيل الدخول (Cookie Lifetime)" : "Cookie Lifetime / Validity"}
+            </label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                id="net-cookie-lifetime"
+                name="cookieLifetime"
+                dir="ltr"
+                type="text"
+                className="min-h-[44px] sm:min-h-[36px] w-36 bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                value={config.cookieLifetime}
+                onChange={(e) => onChange({ cookieLifetime: e.target.value })}
+                placeholder="3d"
+              />
+              <span className="text-xs text-slate-400">
+                {isAr ? "(مثال: 3 أيام 3d أو يوم واحد 1d)" : "(e.g. 3d or 1d)"}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">

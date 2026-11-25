@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import type { AuthMode, HotspotConfig, HotspotUserProfile } from "../types";
+import type { ValidationIssue } from "../utils/validation";
 import { ShieldCheck, Server, Cpu, Gauge, CalendarClock, ArrowRight } from "lucide-react";
 import ToggleSwitch from "./ToggleSwitch";
 import { handleTabListKeyDown } from "../utils/tabKeyboard";
@@ -19,6 +20,7 @@ interface Props {
   onNavigateTab: (tab: number) => void;
   lang: "ar" | "en";
   onDirtyChange?: (dirty: boolean) => void;
+  issues?: ValidationIssue[];
 }
 
 type UmSubTab = "server" | "limitations" | "profiles";
@@ -32,6 +34,7 @@ export default function UserManagerTab({
   onNavigateTab,
   lang,
   onDirtyChange,
+  issues = [],
 }: Props) {
   const isAr = lang === "ar";
   const isV7 = config.rosVersion === "v7";
@@ -44,6 +47,25 @@ export default function UserManagerTab({
 
   const umLimitationsCount = (config.umLimitations || []).length;
   const umProfilesCount = (config.umProfiles || []).length;
+
+  const umServerIssues = issues.filter(
+    (i) =>
+      i.tab === 4 &&
+      (i.id.startsWith("um_radius_") ||
+        i.id.startsWith("ext_radius_") ||
+        i.id.startsWith("um_group_") ||
+        i.id.startsWith("um_weak_"))
+  );
+  const umLimIssues = issues.filter((i) => i.tab === 4 && i.id.startsWith("um_lim_"));
+  const umProfIssues = issues.filter(
+    (i) => i.tab === 4 && (i.id.startsWith("um_prof_") || i.id.startsWith("um_sched_"))
+  );
+
+  const subTabIssues: Record<UmSubTab, ValidationIssue[]> = {
+    server: umServerIssues,
+    limitations: umLimIssues,
+    profiles: umProfIssues,
+  };
 
   useEffect(() => {
     onDirtyChange?.(authMode !== "hotspot_only" && !isExternalRadius && subDirty);
@@ -228,6 +250,8 @@ export default function UserManagerTab({
                 {UM_SUB_TABS.map((t) => {
                   const Icon = tabMeta[t].icon;
                   const isActive = subTab === t;
+                  const tabIssues = subTabIssues[t];
+                  const hasError = tabIssues.some((i) => i.severity === "error");
                   return (
                     <button
                       key={t}
@@ -246,6 +270,17 @@ export default function UserManagerTab({
                     >
                       <Icon className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
                       <span>{tabMeta[t].label}</span>
+                      {tabIssues.length > 0 && (
+                        <span
+                          className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none border ${
+                            hasError
+                              ? "bg-red-950/90 border-red-700 text-red-200"
+                              : "bg-amber-950/90 border-amber-700 text-amber-200"
+                          }`}
+                        >
+                          {tabIssues.length}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -262,6 +297,7 @@ export default function UserManagerTab({
                     onChange={onChange}
                     lang={lang}
                     onDirtyChange={setSubDirty}
+                    issues={issues}
                   />
                 )}
                 {subTab === "limitations" && (
@@ -271,6 +307,7 @@ export default function UserManagerTab({
                     onChange={onChange}
                     lang={lang}
                     onDirtyChange={setSubDirty}
+                    issues={issues}
                   />
                 )}
                 {subTab === "profiles" && (
@@ -279,6 +316,7 @@ export default function UserManagerTab({
                     onChange={onChange}
                     lang={lang}
                     onDirtyChange={setSubDirty}
+                    issues={issues}
                   />
                 )}
               </div>
@@ -289,6 +327,7 @@ export default function UserManagerTab({
               onChange={onChange}
               lang={lang}
               onDirtyChange={setSubDirty}
+              issues={issues}
             />
           )}
         </div>

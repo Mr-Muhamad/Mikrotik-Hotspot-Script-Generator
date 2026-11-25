@@ -5,16 +5,18 @@
 
 import { useState } from "react";
 import type { HotspotConfig, IpBindingEntry, WalledGardenEntry } from "../types";
-import { Lock, Cookie, AlertTriangle, Play, Globe, Clock, Plus, Trash2, Shield, Gauge, Network, ServerCog } from "lucide-react";
+import type { ValidationIssue } from "../utils/validation";
+import { Lock, AlertTriangle, Play, Globe, Clock, Plus, Trash2, Shield, Gauge, Network, ServerCog } from "lucide-react";
 import ToggleSwitch from "./ToggleSwitch";
 
 interface Props {
   config: HotspotConfig;
   onChange: (updates: Partial<HotspotConfig>) => void;
   lang: "ar" | "en";
+  issues?: ValidationIssue[];
 }
 
-export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
+export default function AdvancedFeaturesTab({ config, onChange, lang, issues = [] }: Props) {
   const isAr = lang === "ar";
   const isV7 = config.rosVersion === "v7";
   const [newDomain, setNewDomain] = useState("");
@@ -26,6 +28,11 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
   const [newBindingIp, setNewBindingIp] = useState("");
   const [newBindingType, setNewBindingType] = useState<"bypassed" | "blocked" | "regular">("bypassed");
   const [newBindingComment, setNewBindingComment] = useState("");
+
+  const parentLimitIssue = issues.find((i) => i.tab === 5 && i.field === "parentQueueMaxLimit");
+  const ipBindingIssues = issues.filter(
+    (i) => i.tab === 5 && i.id.startsWith("adv_ip_binding_invalid_")
+  );
 
   const handleAddWalledGarden = () => {
     if (!newDomain.trim()) return;
@@ -93,7 +100,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
           <div className="flex justify-between items-start gap-4">
             <div className="space-y-1">
               <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <Gauge className="w-4 h-4 text-slate-400" aria-hidden="true" />
                 {isAr ? "خوارزمية طوابير التحكم بالسرعة (Queue Type)" : "Queue Engine Type"}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -161,11 +168,23 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
                 name="parentQueueMaxLimit"
                 dir="ltr"
                 type="text"
-                className="min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                aria-invalid={parentLimitIssue?.severity === "error"}
+                className={`min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                  parentLimitIssue
+                    ? parentLimitIssue.severity === "error"
+                      ? "border-red-500"
+                      : "border-amber-500/80"
+                    : "border-slate-700"
+                }`}
                 value={config.parentQueueMaxLimit}
                 onChange={(e) => onChange({ parentQueueMaxLimit: e.target.value })}
                 placeholder="50M/100M"
               />
+              {parentLimitIssue && (
+                <span className={`text-xs ${parentLimitIssue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                  {isAr ? parentLimitIssue.messageAr : parentLimitIssue.messageEn}
+                </span>
+              )}
             </div>
           )}
 
@@ -186,7 +205,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
           <div className="flex justify-between items-start gap-4">
             <div className="space-y-1">
               <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-                <Shield className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <Shield className="w-4 h-4 text-slate-400" aria-hidden="true" />
                 {isAr ? "تأمين الجدار الناري والخدمات ومنع المشاركة" : "Security Hardening, Services & Anti-Sharing"}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -247,7 +266,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
           <div className="space-y-1">
             <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-              <ServerCog className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              <ServerCog className="w-4 h-4 text-slate-400" aria-hidden="true" />
               {isAr ? "التحكم في خدمات الراوتر (/ip service)" : "RouterOS Services Control (/ip service)"}
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
@@ -376,7 +395,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
           <div className="flex justify-between items-start gap-4">
             <div className="space-y-1">
               <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <Gauge className="w-4 h-4 text-slate-400" aria-hidden="true" />
                 {isAr ? "ضبط حجم حزم TCP تلقائياً (TCP MSS Clamping)" : "Automatic TCP MSS Clamping (clamp-to-pmtu)"}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -399,7 +418,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+              <Globe className="w-4 h-4 text-slate-400" aria-hidden="true" />
               {isAr ? "المواقع المسموحة بدون تسجيل دخول (Walled Garden)" : "Walled Garden Domains"}
             </h3>
             <span className="text-xs text-slate-400">
@@ -516,7 +535,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-              <Network className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              <Network className="w-4 h-4 text-slate-400" aria-hidden="true" />
               {isAr ? "استثناءات الأجهزة (IP Bindings / Bypassed APs)" : "IP Bindings (Bypassed / Blocked Devices)"}
             </h3>
             <span className="text-xs text-slate-400">
@@ -590,8 +609,17 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
                 {isAr ? "لا توجد استثناءات أجهزة مضافة بعد." : "No IP bindings configured yet."}
               </p>
             ) : (
-              config.ipBindings.map((b) => (
-                <div key={b.id} className="flex justify-between items-center bg-slate-800/80 px-3 py-1.5 rounded-lg text-xs">
+              config.ipBindings.map((b) => {
+                const bindingIssue = ipBindingIssues.find((i) => i.id === `adv_ip_binding_invalid_${b.id}`);
+                return (
+                <div
+                  key={b.id}
+                  className={`flex justify-between items-center px-3 py-1.5 rounded-lg text-xs border ${
+                    bindingIssue
+                      ? "bg-red-950/40 border-red-700/80"
+                      : "bg-slate-800/80 border-transparent"
+                  }`}
+                >
                   <div className="flex items-center gap-2 flex-wrap font-mono">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${b.type === "blocked" ? "bg-red-950 text-red-300" : "bg-emerald-950 text-emerald-300"}`}>
                       {b.type}
@@ -609,7 +637,18 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
                     <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                 </div>
-              ))
+                );
+              })
+            )}
+
+            {ipBindingIssues.length > 0 && (
+              <div className="space-y-1 pt-1">
+                {ipBindingIssues.map((issue) => (
+                  <div key={issue.id} className="text-xs text-red-300">
+                    {isAr ? issue.messageAr : issue.messageEn}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -617,7 +656,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
         {/* System Scheduler & Housekeeping */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
           <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Clock className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "سكربتات الصيانة والتنظيف التلقائي (System Scheduler)" : "Scheduled Maintenance Scripts"}
           </h3>
 
@@ -667,7 +706,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
           <div className="flex justify-between items-start gap-4">
             <div className="space-y-1">
               <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-                <Play className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <Play className="w-4 h-4 text-slate-400" aria-hidden="true" />
                 {isAr ? "تفعيل الخدمة التجريبية المجانية (Free Trial)" : "Enable Free Trial Mode"}
               </h3>
               <p className="text-xs text-slate-400">
@@ -686,7 +725,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
           </div>
 
           {config.enableTrial && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end pt-2 border-t border-slate-800/60">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end pt-2 border-t border-slate-800/60">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="adv-trial-duration" className="text-slate-200 text-xs font-medium">
                   {isAr ? "مدة التجربة المجانية لكل مستخدم" : "Trial Uptime Duration"}
@@ -719,49 +758,22 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
                 />
                 <span className="text-xs text-slate-400">({isAr ? "مثال: يوم واحد 1d أو 12h" : "example: 1d for one day"})</span>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Cookie / MAC Cookie Auto-login */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
-          <div className="flex justify-between items-start gap-4">
-            <div className="space-y-1">
-              <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-                <Cookie className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-                {isAr ? "حفظ تسجيل دخول المشتركين تلقائياً (Cookie Login)" : "Enable MAC Cookie Auto-Login"}
-              </h3>
-              <p className="text-xs text-slate-400">
-                {isAr
-                  ? "تذكر أجهزة المشتركين حتى لا يضطروا لكتابة اسم المستخدم وكلمة المرور في كل مرة يقطع فيها الاتصال مؤقتاً."
-                  : "Remember user devices dynamically so they don't have to re-authenticate during temporary disconnections."}
-              </p>
-            </div>
-            <ToggleSwitch
-              id="adv-cookie-switch"
-              size="sm"
-              checked={config.enableCookie}
-              onChange={(checked) => onChange({ enableCookie: checked })}
-              ariaLabel={isAr ? "تفعيل حفظ تسجيل الدخول Cookie" : "Enable Cookie Login"}
-            />
-          </div>
-
-          {config.enableCookie && (
-            <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-800/60">
-              <label htmlFor="adv-cookie-lifetime" className="text-slate-200 text-xs font-medium">
-                {isAr ? "صلاحية كوكيز تسجيل الدخول (Lifetime)" : "Cookie Lifetime / Validity"}
-              </label>
-              <input
-                id="adv-cookie-lifetime"
-                name="cookieLifetime"
-                dir="ltr"
-                type="text"
-                className="min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400 max-w-xs"
-                value={config.cookieLifetime}
-                onChange={(e) => onChange({ cookieLifetime: e.target.value })}
-                placeholder="3d"
-              />
-              <span className="text-xs text-slate-400">({isAr ? "مثال: 3 أيام 3d أو يوم واحد 1d" : "example: 3d for three days"})</span>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="adv-trial-rate" className="text-slate-200 text-xs font-medium">
+                  {isAr ? "سرعة التجربة المجانية RX/TX" : "Trial Rate Limit (RX/TX)"}
+                </label>
+                <input
+                  id="adv-trial-rate"
+                  name="trialRateLimit"
+                  dir="ltr"
+                  type="text"
+                  className="min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
+                  value={config.trialRateLimit || ""}
+                  onChange={(e) => onChange({ trialRateLimit: e.target.value })}
+                  placeholder="256k/512k"
+                />
+                <span className="text-xs text-slate-400">({isAr ? "مثال: رفع/تحميل 256k/512k" : "example: upload/download 256k/512k"})</span>
+              </div>
             </div>
           )}
         </div>

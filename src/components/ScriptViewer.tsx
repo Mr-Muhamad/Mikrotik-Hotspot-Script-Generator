@@ -125,8 +125,9 @@ const ScriptViewer = memo(function ScriptViewer({
 
   return (
     <section
+      id="script-viewer-panel"
       aria-label={isAr ? "معاينة السكربت المولد" : "Generated RouterOS Script"}
-      className="lg:col-span-6 flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden h-[540px] sm:h-[600px] lg:h-[720px]"
+      className="lg:col-span-6 flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden h-[520px] sm:h-[600px] lg:h-[calc(100dvh-6.5rem)] lg:sticky lg:top-20"
     >
       {/* Editor Header */}
       <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3 flex justify-between items-center flex-wrap gap-2">
@@ -143,7 +144,7 @@ const ScriptViewer = memo(function ScriptViewer({
           <button
             onClick={handleCopy}
             type="button"
-            className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs rounded-lg transition font-medium border border-slate-700"
+            className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs rounded-lg transition font-medium border border-slate-600"
           >
             {copyStatus === "copied" ? (
               <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
@@ -162,9 +163,9 @@ const ScriptViewer = memo(function ScriptViewer({
           <button
             onClick={handleDownload}
             type="button"
-            className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs rounded-lg transition font-semibold"
+            className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs rounded-lg transition font-medium border border-slate-600"
           >
-            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            <Download className="w-3.5 h-3.5 text-slate-300" aria-hidden="true" />
             <span>{isAr ? "تحميل ملف .rsc" : "Download RSC"}</span>
           </button>
 
@@ -173,7 +174,7 @@ const ScriptViewer = memo(function ScriptViewer({
               onClick={handleBundle}
               type="button"
               title={isAr ? "تحميل حزمة نشر ZIP تضم السكربت وصفحة login.html" : "Download ZIP bundle (.rsc + login.html + guide)"}
-              className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs rounded-lg transition font-semibold border border-emerald-700/70"
+              className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs rounded-lg transition font-bold"
             >
               <Archive className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{isAr ? "حزمة ZIP" : "ZIP Bundle"}</span>
@@ -192,7 +193,7 @@ const ScriptViewer = memo(function ScriptViewer({
             type="text"
             aria-label={isAr ? "بحث داخل السكربت" : "Search inside script"}
             placeholder={isAr ? "ابحث في الأوامر (مثل radius)..." : "Search commands (e.g. radius)..."}
-            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-950 border border-slate-800 text-slate-100 rounded-lg ps-8 pe-16 py-1.5 text-xs font-mono"
+            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-950 border border-slate-600 text-slate-100 rounded-lg ps-8 pe-16 py-1.5 text-xs font-mono"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -205,7 +206,7 @@ const ScriptViewer = memo(function ScriptViewer({
                 type="button"
                 onClick={() => setSearchQuery("")}
                 aria-label={isAr ? "مسح البحث" : "Clear search"}
-                className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
+                className="min-h-[44px] min-w-[44px] sm:min-h-[32px] sm:min-w-[32px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
               >
                 <X className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
@@ -223,7 +224,7 @@ const ScriptViewer = memo(function ScriptViewer({
               handleJumpToSection(e.target.value);
               e.target.value = "";
             }}
-            className="flex-1 min-w-0 w-full truncate min-h-[44px] sm:min-h-[36px] bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs sm:max-w-[200px]"
+            className="flex-1 min-w-0 w-full truncate min-h-[44px] sm:min-h-[36px] bg-slate-950 border border-slate-600 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs sm:max-w-[200px]"
           >
             <option value="" disabled>
               {isAr ? "الانتقال إلى قسم..." : "Jump to section..."}
@@ -243,7 +244,7 @@ const ScriptViewer = memo(function ScriptViewer({
             className={`min-h-[44px] sm:min-h-[36px] px-2.5 py-1.5 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 transition flex-shrink-0 ${
               wrapLines
                 ? "bg-emerald-950/70 border-emerald-600 text-emerald-300"
-                : "bg-slate-950 border-slate-800 text-slate-300 hover:text-white"
+                : "bg-slate-950 border-slate-600 text-slate-300 hover:text-white"
             }`}
           >
             <WrapText className="w-3.5 h-3.5" aria-hidden="true" />

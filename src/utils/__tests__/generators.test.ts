@@ -23,6 +23,7 @@ import {
   generateHotspotLoginPageHtml,
   generateHotspotPortalFiles,
   generateMd5JsFile,
+  getPortalThemeColors,
   hexMD5,
 } from "../htmlTemplateGenerator.ts";
 import { validateConfiguration } from "../validation.ts";
@@ -1258,4 +1259,42 @@ test("TCP MSS clamping, forced DNS redirect, Universal Client address-pool=none,
   assert.equal(customHydrated.enableUniversalClient, true);
   assert.equal(customHydrated.forceDnsRedirect, false);
   assert.equal(customHydrated.clampTcpMss, false);
+});
+
+test("Captive Portal HTML prevents iOS auto-zoom, disables autocapitalize, exposes password toggle, fixes status link, and meets WCAG contrast", () => {
+  const loginHtml = generateHotspotLoginPageHtml(
+    makeBaseConfig({ dnsName: "wifi.cafe", portalLoginMode: "both" }),
+    "ar"
+  );
+
+  assert.match(loginHtml, /font-size:\s*16px;/);
+  assert.match(loginHtml, /autocapitalize="none" autocorrect="off" spellcheck="false"/);
+  assert.match(loginHtml, /function togglePassVisibility\(btn\)/);
+  assert.match(loginHtml, /onclick="togglePassVisibility\(this\)"/);
+  assert.match(loginHtml, /href="http:\/\/wifi\.cafe\/status"/);
+  assert.doesNotMatch(loginHtml, /www\.wifi\.cafe/);
+
+  const files = generateHotspotPortalFiles(makeBaseConfig({ dnsName: "wifi.cafe" }), "en");
+  assert.match(files["status.html"], /\.danger-btn\s*\{[^}]*background:\s*#b91c1c;\s*color:\s*#ffffff;/);
+
+  const relLuminance = (hex: string): number => {
+    const clean = hex.replace("#", "");
+    const channels = [0, 2, 4].map((offset) => {
+      const c = parseInt(clean.slice(offset, offset + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const contrastRatio = (c1: string, c2: string): number => {
+    const [l1, l2] = [relLuminance(c1), relLuminance(c2)].sort((a, b) => b - a);
+    return (l1 + 0.05) / (l2 + 0.05);
+  };
+
+  for (const theme of ["emerald", "blue", "purple", "dark"] as const) {
+    const palette = getPortalThemeColors(theme);
+    const btnContrast = contrastRatio(palette.accentText, palette.accentColor);
+    const linkContrast = contrastRatio(palette.linkColor, "#0f172a");
+    assert.ok(btnContrast >= 4.5, `${theme} submit-btn contrast too low: ${btnContrast.toFixed(2)}:1`);
+    assert.ok(linkContrast >= 4.5, `${theme} link contrast too low: ${linkContrast.toFixed(2)}:1`);
+  }
 });

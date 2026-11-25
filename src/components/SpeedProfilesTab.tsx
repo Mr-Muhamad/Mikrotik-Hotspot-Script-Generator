@@ -5,7 +5,8 @@
 
 import { useEffect, useState } from "react";
 import type { AuthMode, HotspotConfig, HotspotUserProfile } from "../types";
-import { Gauge, Plus, Trash2, Edit, RefreshCw, Zap, ShieldCheck, ArrowRight } from "lucide-react";
+import type { ValidationIssue } from "../utils/validation";
+import { Gauge, Plus, Trash2, Edit, RefreshCw, Zap, ShieldCheck, ArrowRight, ChevronDown, AlertTriangle } from "lucide-react";
 import ToggleSwitch from "./ToggleSwitch";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -20,6 +21,7 @@ interface Props {
   onNavigateTab: (tab: number) => void;
   lang: "ar" | "en";
   onDirtyChange?: (dirty: boolean) => void;
+  issues?: ValidationIssue[];
 }
 
 export default function SpeedProfilesTab({
@@ -33,6 +35,7 @@ export default function SpeedProfilesTab({
   onNavigateTab,
   lang,
   onDirtyChange,
+  issues = [],
 }: Props) {
   const isAr = lang === "ar";
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -160,33 +163,44 @@ export default function SpeedProfilesTab({
         )}
       </div>
 
-      {/* Operation Mode Selector */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
-        <span className="text-xs font-semibold text-slate-200 block">
-          {isAr ? "نمط إدارة السرعات والمشتركين:" : "Subscriber & Rate-Limit Control Mode:"}
-        </span>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {modes.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => onConfigChange({ authMode: m.id })}
-              aria-pressed={authMode === m.id}
-              className={`min-h-[44px] p-3 rounded-xl border text-start transition flex flex-col justify-between gap-1 ${
-                authMode === m.id
-                  ? "bg-emerald-950/60 border-emerald-500 text-emerald-200"
-                  : "bg-slate-950/40 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white"
-              }`}
-            >
-              <span className="text-xs font-bold">{m.title}</span>
-              <span className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* NAS Default Profile & Trial Rate Card */}
+      {/* NAS Default Profile & Compact Operation Mode Control */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
+        <div className="pb-3 border-b border-slate-800/80 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="text-xs font-semibold text-slate-200">
+              {isAr ? "نمط إدارة السرعات والمشتركين:" : "Subscriber & Rate-Limit Control Mode:"}
+            </span>
+            <div
+              role="group"
+              aria-label={isAr ? "نمط إدارة السرعات والمشتركين" : "Subscriber & Rate-Limit Control Mode"}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-1 bg-slate-950/90 border border-slate-800 p-1 rounded-xl w-full sm:w-auto"
+            >
+              {modes.map((m) => {
+                const active = authMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    title={m.desc}
+                    onClick={() => onConfigChange({ authMode: m.id })}
+                    aria-pressed={active}
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-semibold transition text-center whitespace-nowrap ${
+                      active
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "text-slate-300 hover:text-white hover:bg-slate-800/70"
+                    }`}
+                  >
+                    {m.title}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {modes.find((m) => m.id === authMode)?.desc}
+          </p>
+        </div>
+
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h3 className="text-sm font-medium text-slate-100">
@@ -279,27 +293,20 @@ export default function SpeedProfilesTab({
         </div>
 
         {config.enableTrial && (
-          <div className="pt-3 border-t border-slate-800/70 grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-            <div>
-              <label htmlFor="hs-trial-rate" className="text-xs text-emerald-300 mb-1 block font-medium">
-                {isAr ? "سرعة بروفايل التجربة المجانية (trial-profile RX/TX)" : "Trial Profile Rate Limit (RX/TX)"}
-              </label>
-              <input
-                id="hs-trial-rate"
-                name="trialRateLimit"
-                dir="ltr"
-                type="text"
-                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                value={config.trialRateLimit}
-                onChange={(e) => onConfigChange({ trialRateLimit: e.target.value })}
-                placeholder="256k/512k"
-              />
-            </div>
-            <p className="text-[11px] text-slate-400">
+          <div className="pt-2.5 border-t border-slate-800/70 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <span className="text-slate-300">
               {isAr
-                ? "يُنشأ له بروفايل مخصص باسم trial-profile بعيداً عن default."
-                : "Emits a dedicated `trial-profile` entry referenced by `trial-user-profile`."}
-            </p>
+                ? `التجربة المجانية مفعّلة (السرعة الحالية: ${config.trialRateLimit || "256k/512k"}).`
+                : `Free Trial is enabled (current rate limit: ${config.trialRateLimit || "256k/512k"}).`}
+            </span>
+            <button
+              type="button"
+              onClick={() => onNavigateTab(5)}
+              className="min-h-[44px] sm:min-h-[36px] inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 hover:underline font-medium"
+            >
+              <span>{isAr ? "تعديل سرعة وإعدادات التجربة في الأمان والميزات" : "Edit trial rate & settings in Security & Advanced"}</span>
+              <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" aria-hidden="true" />
+            </button>
           </div>
         )}
       </div>
@@ -344,6 +351,31 @@ export default function SpeedProfilesTab({
               const isEditing = editingIndex === idx;
               const current = isEditing && tempProfile ? tempProfile : profile;
               const fid = `prof-${profile.id}`;
+              const nameIssues = issues.filter((i) => i.tab === 3 && i.field === `profile_${idx}_name`);
+              const rateIssues = issues.filter((i) => i.tab === 3 && i.field === `profile_${idx}_rate`);
+              const profIssues = [...nameIssues, ...rateIssues];
+              const hasAdvancedConfigured = Boolean(
+                current.burstDownload ||
+                current.burstUpload ||
+                current.minDownload ||
+                current.minUpload ||
+                current.addressPool ||
+                current.addressList ||
+                current.transparentProxy
+              );
+              const advSummaryTags: string[] = [];
+              if (current.burstDownload || current.burstUpload) {
+                advSummaryTags.push(`Burst ${current.burstUpload || "-"}/${current.burstDownload || "-"}`);
+              }
+              if (current.minDownload || current.minUpload) {
+                advSummaryTags.push(`MIR ${current.minUpload || "-"}/${current.minDownload || "-"}`);
+              }
+              if (current.addressList) {
+                advSummaryTags.push(`List:${current.addressList}`);
+              }
+              if (current.priority && current.priority !== 8) {
+                advSummaryTags.push(`P${current.priority}`);
+              }
 
               return (
                 <div
@@ -351,7 +383,9 @@ export default function SpeedProfilesTab({
                   className={`border rounded-xl p-4 transition-all duration-200 ${
                     isEditing
                       ? "bg-slate-800/80 border-emerald-500/60 shadow-md"
-                      : "bg-slate-900/40 border-slate-800 hover:bg-slate-900/60"
+                      : profIssues.length > 0
+                        ? "bg-slate-900/40 border-red-800/80 hover:bg-slate-900/60"
+                        : "bg-slate-900/40 border-slate-800 hover:bg-slate-900/60"
                   }`}
                 >
                   {isEditing ? (
@@ -361,21 +395,30 @@ export default function SpeedProfilesTab({
                           ? "تعديل غير محفوظ: اضغط حفظ لتطبيق التغيير على السكربت"
                           : "Unsaved edit: click Save to apply changes to the script"}
                       </div>
-                      {/* Identity & Shared Users */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+
+                      {/* Core Identity & Shared Users */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
                         <div>
                           <label htmlFor={`${fid}-name`} className="text-xs text-slate-300 mb-1 block">
                             {isAr ? "اسم البروفايل في ميكروتيك" : "Profile Name (MikroTik)"}
                           </label>
                           <input
                             id={`${fid}-name`}
-                            name="profileName"
+                            name={`profile_${idx}_name`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={nameIssues.length > 0}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              nameIssues.length > 0 ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={current.name}
                             onChange={(e) => setTempProfile({ ...tempProfile!, name: e.target.value })}
                           />
+                          {nameIssues.map((issue) => (
+                            <p key={issue.id} className="text-[11px] text-red-300 mt-1">
+                              {isAr ? issue.messageAr : issue.messageEn}
+                            </p>
+                          ))}
                         </div>
                         <div>
                           <label htmlFor={`${fid}-display`} className="text-xs text-slate-300 mb-1 block">
@@ -408,381 +451,413 @@ export default function SpeedProfilesTab({
                         </div>
                       </div>
 
-                      {/* Core Speeds & Minimum Guaranteed Rate (MIR / limit-at) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-                        <div>
-                          <label htmlFor={`${fid}-ul`} className="text-xs text-slate-200 font-medium mb-1 block">
-                            {isAr ? "الرفع RX (Upload Limit)" : "Upload RX (Client Upload)"}
-                          </label>
-                          <input
-                            id={`${fid}-ul`}
-                            name="profileUpload"
-                            dir="ltr"
-                            type="text"
-                            placeholder="512k"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.uploadLimit}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, uploadLimit: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-dl`} className="text-xs text-slate-200 font-medium mb-1 block">
-                            {isAr ? "التحميل TX (Download Limit)" : "Download TX (Client Download)"}
-                          </label>
-                          <input
-                            id={`${fid}-dl`}
-                            name="profileDownload"
-                            dir="ltr"
-                            type="text"
-                            placeholder="2M"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.downloadLimit}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, downloadLimit: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-min-ul`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "أدنى رفع مضمون (Min RX)" : "Min Upload MIR (RX)"}
-                          </label>
-                          <input
-                            id={`${fid}-min-ul`}
-                            name="profileMinUpload"
-                            dir="ltr"
-                            type="text"
-                            placeholder="256k"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.minUpload || ""}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, minUpload: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-min-dl`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "أدنى تحميل مضمون (Min TX)" : "Min Download MIR (TX)"}
-                          </label>
-                          <input
-                            id={`${fid}-min-dl`}
-                            name="profileMinDownload"
-                            dir="ltr"
-                            type="text"
-                            placeholder="1M"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.minDownload || ""}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, minDownload: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Burst Acceleration */}
-                      <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 space-y-2.5">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
-                          <Zap className="w-3.5 h-3.5" aria-hidden="true" />
-                          <span>{isAr ? "تسريع البيرست (Burst - اختياري)" : "Burst Acceleration (Optional)"}</span>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end text-xs">
+                      {/* Core Speeds & Local Card Validity */}
+                      <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
                           <div>
-                            <label htmlFor={`${fid}-burst-ul`} className="text-slate-300 mb-1 block">{isAr ? "Burst رفع (RX)" : "Burst RX"}</label>
+                            <label htmlFor={`${fid}-ul`} className="text-xs text-slate-200 font-medium mb-1 block">
+                              {isAr ? "الرفع RX (Upload Limit)" : "Upload RX (Client Upload)"}
+                            </label>
                             <input
-                              id={`${fid}-burst-ul`}
-                              name="profileBurstUl"
+                              id={`${fid}-ul`}
+                              name={`profile_${idx}_rate`}
                               dir="ltr"
                               type="text"
-                              placeholder="1M"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.burstUpload || ""}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, burstUpload: e.target.value })}
+                              placeholder="512k"
+                              aria-invalid={rateIssues.length > 0}
+                              className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400 ${
+                                rateIssues.length > 0 ? "border-red-500" : "border-slate-700"
+                              }`}
+                              value={current.uploadLimit}
+                              onChange={(e) => setTempProfile({ ...tempProfile!, uploadLimit: e.target.value })}
                             />
                           </div>
                           <div>
-                            <label htmlFor={`${fid}-burst-dl`} className="text-slate-300 mb-1 block">{isAr ? "Burst تحميل (TX)" : "Burst TX"}</label>
+                            <label htmlFor={`${fid}-dl`} className="text-xs text-slate-200 font-medium mb-1 block">
+                              {isAr ? "التحميل TX (Download Limit)" : "Download TX (Client Download)"}
+                            </label>
                             <input
-                              id={`${fid}-burst-dl`}
-                              name="profileBurstDl"
+                              id={`${fid}-dl`}
+                              name="profileDownload"
                               dir="ltr"
                               type="text"
-                              placeholder="4M"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.burstDownload || ""}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, burstDownload: e.target.value })}
+                              placeholder="2M"
+                              aria-invalid={rateIssues.length > 0}
+                              className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400 ${
+                                rateIssues.length > 0 ? "border-red-500" : "border-slate-700"
+                              }`}
+                              value={current.downloadLimit}
+                              onChange={(e) => setTempProfile({ ...tempProfile!, downloadLimit: e.target.value })}
                             />
                           </div>
                           <div>
-                            <label htmlFor={`${fid}-thresh-ul`} className="text-slate-300 mb-1 block">{isAr ? "حد البيرست RX" : "Threshold RX"}</label>
+                            <label htmlFor={`${fid}-local-val`} className="text-xs text-slate-200 mb-1 block">
+                              {isAr ? "صلاحية الكارت محلياً (فارغ = معطّل)" : "Local Validity (empty = off)"}
+                            </label>
                             <input
-                              id={`${fid}-thresh-ul`}
-                              name="profileThreshUl"
+                              id={`${fid}-local-val`}
+                              name="profileLocalValidity"
                               dir="ltr"
                               type="text"
-                              placeholder="384k"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.burstThresholdUpload || ""}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, burstThresholdUpload: e.target.value })}
+                              placeholder="e.g. 7d, 12h, 30d"
+                              className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                              value={current.localValidity || ""}
+                              onChange={(e) => setTempProfile({ ...tempProfile!, localValidity: e.target.value })}
                             />
                           </div>
                           <div>
-                            <label htmlFor={`${fid}-thresh-dl`} className="text-slate-300 mb-1 block">{isAr ? "حد البيرست TX" : "Threshold TX"}</label>
-                            <input
-                              id={`${fid}-thresh-dl`}
-                              name="profileThreshDl"
-                              dir="ltr"
-                              type="text"
-                              placeholder="1500k"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.burstThresholdDownload || ""}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, burstThresholdDownload: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={`${fid}-time-ul`} className="text-slate-300 mb-1 block">{isAr ? "زمن بيرست RX" : "Burst Time RX"}</label>
-                            <input
-                              id={`${fid}-time-ul`}
-                              name="profileBurstTimeUl"
-                              dir="ltr"
-                              type="text"
-                              placeholder="8s"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.burstTimeUpload || "8s"}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, burstTimeUpload: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={`${fid}-time-dl`} className="text-slate-300 mb-1 block">{isAr ? "زمن بيرست TX" : "Burst Time TX"}</label>
-                            <input
-                              id={`${fid}-time-dl`}
-                              name="profileBurstTimeDl"
-                              dir="ltr"
-                              type="text"
-                              placeholder="8s"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.burstTimeDownload || "8s"}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, burstTimeDownload: e.target.value })}
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label htmlFor={`${fid}-priority`} className="text-slate-300 mb-1 block">{isAr ? "أولوية الطابور (Priority 1-8)" : "Queue Priority (1-8)"}</label>
+                            <label htmlFor={`${fid}-local-act`} className="text-xs text-slate-200 mb-1 block">
+                              {isAr ? "الإجراء عند انتهاء الصلاحية" : "Action on Expiry"}
+                            </label>
                             <select
-                              id={`${fid}-priority`}
-                              name="profilePriority"
-                              className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
-                              value={current.priority || 8}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, priority: parseInt(e.target.value, 10) || 8 })}
+                              id={`${fid}-local-act`}
+                              name="profileLocalExpiryAction"
+                              disabled={!current.localValidity?.trim()}
+                              className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs disabled:opacity-50"
+                              value={current.localExpiryAction || "remove"}
+                              onChange={(e) => setTempProfile({ ...tempProfile!, localExpiryAction: e.target.value as "remove" | "disable" })}
                             >
-                              {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
-                                <option key={p} value={p}>
-                                  {p} {p === 1 ? (isAr ? "(الأعلى)" : "(Highest)") : p === 8 ? (isAr ? "(الافتراضي)" : "(Default)") : ""}
-                                </option>
-                              ))}
+                              <option value="remove">{isAr ? "حذف المستخدم وطرده (remove)" : "Remove user & kick session"}</option>
+                              <option value="disable">{isAr ? "تعطيل المستخدم فقط (disable)" : "Disable user & kick session"}</option>
                             </select>
                           </div>
                         </div>
+                        {rateIssues.map((issue) => (
+                          <p key={issue.id} className="text-[11px] text-red-300">
+                            {isAr ? issue.messageAr : issue.messageEn}
+                          </p>
+                        ))}
                       </div>
 
-                      {/* Hotspot Timeouts & MAC Cookie */}
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-                        <div>
-                          <label htmlFor={`${fid}-session-to`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "مهلة الجلسة (Session Timeout)" : "Session Timeout"}
-                          </label>
-                          <input
-                            id={`${fid}-session-to`}
-                            name="profileSessionTimeout"
-                            dir="ltr"
-                            type="text"
-                            placeholder="00:00:00"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.sessionTimeout}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, sessionTimeout: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-idle-to`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "مهلة الخمول (Idle Timeout)" : "Idle Timeout"}
-                          </label>
-                          <input
-                            id={`${fid}-idle-to`}
-                            name="profileIdleTimeout"
-                            dir="ltr"
-                            type="text"
-                            placeholder="00:15:00"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.idleTimeout}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, idleTimeout: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-keepalive-to`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "Keepalive Timeout" : "Keepalive Timeout"}
-                          </label>
-                          <input
-                            id={`${fid}-keepalive-to`}
-                            name="profileKeepaliveTimeout"
-                            dir="ltr"
-                            type="text"
-                            placeholder="00:02:00"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.keepaliveTimeout}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, keepaliveTimeout: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-autorefresh`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "Status Autorefresh" : "Status Autorefresh"}
-                          </label>
-                          <input
-                            id={`${fid}-autorefresh`}
-                            name="profileAutorefresh"
-                            dir="ltr"
-                            type="text"
-                            placeholder="1m"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.statusAutorefresh}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, statusAutorefresh: e.target.value })}
-                          />
-                        </div>
-                      </div>
+                      {/* Progressive Disclosure: 15+ Advanced & Tuning Fields */}
+                      <details className="group bg-slate-900/50 border border-slate-700/70 rounded-xl">
+                        <summary className="cursor-pointer select-none px-3.5 py-2.5 text-xs font-medium text-slate-200 flex items-center justify-between gap-2 min-h-[44px] list-none">
+                          <span>
+                            {isAr
+                              ? "إعدادات متقدمة: البيرست، MIR، المهلة الزمنية، وقوائم العناوين"
+                              : "Advanced Settings: Burst, MIR, Timeouts & Address Lists"}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            {hasAdvancedConfigured && (
+                              <span dir="ltr" className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-700/60 text-emerald-300">
+                                {advSummaryTags.length > 0 ? advSummaryTags.slice(0, 2).join(" | ") : (isAr ? "مخصّص" : "Configured")}
+                              </span>
+                            )}
+                            <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+                          </span>
+                        </summary>
 
-                      {/* Advanced Hotspot Policy: Pool, Address List, Queue Ordering, MAC Cookie */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-                        <div>
-                          <label htmlFor={`${fid}-pool`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "Address Pool (اختياري)" : "Address Pool (Optional)"}
-                          </label>
-                          <input
-                            id={`${fid}-pool`}
-                            name="profileAddressPool"
-                            dir="ltr"
-                            type="text"
-                            placeholder="none"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.addressPool || ""}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, addressPool: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-addrlist`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "Firewall Address-List" : "Firewall Address-List"}
-                          </label>
-                          <input
-                            id={`${fid}-addrlist`}
-                            name="profileAddressList"
-                            dir="ltr"
-                            type="text"
-                            placeholder="vip_clients"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.addressList || ""}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, addressList: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-insert-before`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "ترتيب الطابور (Insert Queue)" : "Insert Queue Before"}
-                          </label>
-                          <select
-                            id={`${fid}-insert-before`}
-                            name="profileInsertQueueBefore"
-                            dir="ltr"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.insertQueueBefore || "first"}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, insertQueueBefore: e.target.value as "first" | "bottom" })}
-                          >
-                            <option value="first">first</option>
-                            <option value="bottom">bottom</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-mac-to`} className="text-xs text-slate-300 mb-1 block">
-                            {isAr ? "مدة MAC Cookie" : "MAC Cookie Timeout"}
-                          </label>
-                          <input
-                            id={`${fid}-mac-to`}
-                            name="profileMacCookieTimeout"
-                            dir="ltr"
-                            type="text"
-                            placeholder="3d"
-                            disabled={!current.addMacCookie}
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400 disabled:opacity-50"
-                            value={current.macCookieTimeout}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, macCookieTimeout: e.target.value })}
-                          />
-                        </div>
-                      </div>
+                        <div className="p-3.5 pt-2 space-y-3 border-t border-slate-800/80">
+                          {/* Minimum Guaranteed Rate (MIR / limit-at) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                            <div>
+                              <label htmlFor={`${fid}-min-ul`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "أدنى رفع مضمون (Min RX)" : "Min Upload MIR (RX)"}
+                              </label>
+                              <input
+                                id={`${fid}-min-ul`}
+                                name="profileMinUpload"
+                                dir="ltr"
+                                type="text"
+                                placeholder="256k"
+                                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.minUpload || ""}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, minUpload: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-min-dl`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "أدنى تحميل مضمون (Min TX)" : "Min Download MIR (TX)"}
+                              </label>
+                              <input
+                                id={`${fid}-min-dl`}
+                                name="profileMinDownload"
+                                dir="ltr"
+                                type="text"
+                                placeholder="1M"
+                                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.minDownload || ""}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, minDownload: e.target.value })}
+                              />
+                            </div>
+                          </div>
 
-                      {/* Optional Local Voucher Auto-Expiry on-login Script */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-                        <div>
-                          <label htmlFor={`${fid}-local-val`} className="text-xs text-slate-200 mb-1 block">
-                            {isAr ? "صلاحية الكارت محلياً بعد أول دخول (فارغ = معطّل)" : "Local Card Validity on First Login (empty = off)"}
-                          </label>
-                          <input
-                            id={`${fid}-local-val`}
-                            name="profileLocalValidity"
-                            dir="ltr"
-                            type="text"
-                            placeholder="e.g. 7d, 12h, 30d"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2.5 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
-                            value={current.localValidity || ""}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, localValidity: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`${fid}-local-act`} className="text-xs text-slate-200 mb-1 block">
-                            {isAr ? "الإجراء عند انتهاء الصلاحية" : "Action on Expiry"}
-                          </label>
-                          <select
-                            id={`${fid}-local-act`}
-                            name="profileLocalExpiryAction"
-                            disabled={!current.localValidity?.trim()}
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2.5 py-1 text-xs disabled:opacity-50"
-                            value={current.localExpiryAction || "remove"}
-                            onChange={(e) => setTempProfile({ ...tempProfile!, localExpiryAction: e.target.value as "remove" | "disable" })}
-                          >
-                            <option value="remove">{isAr ? "حذف المستخدم وطرده (remove)" : "Remove user & kick session"}</option>
-                            <option value="disable">{isAr ? "تعطيل المستخدم فقط (disable)" : "Disable user & kick session"}</option>
-                          </select>
-                        </div>
-                      </div>
+                          {/* Burst Acceleration */}
+                          <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 space-y-2.5">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                              <Zap className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>{isAr ? "تسريع البيرست (Burst - اختياري)" : "Burst Acceleration (Optional)"}</span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end text-xs">
+                              <div>
+                                <label htmlFor={`${fid}-burst-ul`} className="text-slate-300 mb-1 block">{isAr ? "Burst رفع (RX)" : "Burst RX"}</label>
+                                <input
+                                  id={`${fid}-burst-ul`}
+                                  name="profileBurstUl"
+                                  dir="ltr"
+                                  type="text"
+                                  placeholder="1M"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.burstUpload || ""}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, burstUpload: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`${fid}-burst-dl`} className="text-slate-300 mb-1 block">{isAr ? "Burst تحميل (TX)" : "Burst TX"}</label>
+                                <input
+                                  id={`${fid}-burst-dl`}
+                                  name="profileBurstDl"
+                                  dir="ltr"
+                                  type="text"
+                                  placeholder="4M"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.burstDownload || ""}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, burstDownload: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`${fid}-thresh-ul`} className="text-slate-300 mb-1 block">{isAr ? "حد البيرست RX" : "Threshold RX"}</label>
+                                <input
+                                  id={`${fid}-thresh-ul`}
+                                  name="profileThreshUl"
+                                  dir="ltr"
+                                  type="text"
+                                  placeholder="384k"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.burstThresholdUpload || ""}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, burstThresholdUpload: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`${fid}-thresh-dl`} className="text-slate-300 mb-1 block">{isAr ? "حد البيرست TX" : "Threshold TX"}</label>
+                                <input
+                                  id={`${fid}-thresh-dl`}
+                                  name="profileThreshDl"
+                                  dir="ltr"
+                                  type="text"
+                                  placeholder="1500k"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.burstThresholdDownload || ""}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, burstThresholdDownload: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`${fid}-time-ul`} className="text-slate-300 mb-1 block">{isAr ? "زمن بيرست RX" : "Burst Time RX"}</label>
+                                <input
+                                  id={`${fid}-time-ul`}
+                                  name="profileBurstTimeUl"
+                                  dir="ltr"
+                                  type="text"
+                                  placeholder="8s"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.burstTimeUpload || "8s"}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, burstTimeUpload: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`${fid}-time-dl`} className="text-slate-300 mb-1 block">{isAr ? "زمن بيرست TX" : "Burst Time TX"}</label>
+                                <input
+                                  id={`${fid}-time-dl`}
+                                  name="profileBurstTimeDl"
+                                  dir="ltr"
+                                  type="text"
+                                  placeholder="8s"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.burstTimeDownload || "8s"}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, burstTimeDownload: e.target.value })}
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label htmlFor={`${fid}-priority`} className="text-slate-300 mb-1 block">{isAr ? "أولوية الطابور (Priority 1-8)" : "Queue Priority (1-8)"}</label>
+                                <select
+                                  id={`${fid}-priority`}
+                                  name="profilePriority"
+                                  className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 font-mono text-xs focus:ring-2 focus:ring-emerald-400"
+                                  value={current.priority || 8}
+                                  onChange={(e) => setTempProfile({ ...tempProfile!, priority: parseInt(e.target.value, 10) || 8 })}
+                                >
+                                  {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
+                                    <option key={p} value={p}>
+                                      {p} {p === 1 ? (isAr ? "(الأعلى)" : "(Highest)") : p === 8 ? (isAr ? "(الافتراضي)" : "(Default)") : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
 
-                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                        <div className="flex flex-wrap items-center gap-4 text-xs">
-                          <label htmlFor={`${fid}-add-mac`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer text-slate-200">
-                            <input
-                              id={`${fid}-add-mac`}
-                              name="profileAddMacCookie"
-                              type="checkbox"
-                              className="w-4 h-4 accent-emerald-500"
-                              checked={current.addMacCookie}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, addMacCookie: e.target.checked })}
-                            />
-                            <span>add-mac-cookie</span>
-                          </label>
-                          <label htmlFor={`${fid}-proxy`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer text-slate-200">
-                            <input
-                              id={`${fid}-proxy`}
-                              name="profileTransparentProxy"
-                              type="checkbox"
-                              className="w-4 h-4 accent-emerald-500"
-                              checked={Boolean(current.transparentProxy)}
-                              onChange={(e) => setTempProfile({ ...tempProfile!, transparentProxy: e.target.checked })}
-                            />
-                            <span>transparent-proxy</span>
-                          </label>
-                        </div>
+                          {/* Hotspot Timeouts */}
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                            <div>
+                              <label htmlFor={`${fid}-session-to`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "مهلة الجلسة (Session Timeout)" : "Session Timeout"}
+                              </label>
+                              <input
+                                id={`${fid}-session-to`}
+                                name="profileSessionTimeout"
+                                dir="ltr"
+                                type="text"
+                                placeholder="00:00:00"
+                                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.sessionTimeout}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, sessionTimeout: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-idle-to`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "مهلة الخمول (Idle Timeout)" : "Idle Timeout"}
+                              </label>
+                              <input
+                                id={`${fid}-idle-to`}
+                                name="profileIdleTimeout"
+                                dir="ltr"
+                                type="text"
+                                placeholder="00:15:00"
+                                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.idleTimeout}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, idleTimeout: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-keepalive-to`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "Keepalive Timeout" : "Keepalive Timeout"}
+                              </label>
+                              <input
+                                id={`${fid}-keepalive-to`}
+                                name="profileKeepaliveTimeout"
+                                dir="ltr"
+                                type="text"
+                                placeholder="00:02:00"
+                                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.keepaliveTimeout}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, keepaliveTimeout: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-autorefresh`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "Status Autorefresh" : "Status Autorefresh"}
+                              </label>
+                              <input
+                                id={`${fid}-autorefresh`}
+                                name="profileAutorefresh"
+                                dir="ltr"
+                                type="text"
+                                placeholder="1m"
+                                className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.statusAutorefresh}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, statusAutorefresh: e.target.value })}
+                              />
+                            </div>
+                          </div>
 
-                        <div className="flex gap-2">
-                          <button
-                            onClick={cancelEdit}
-                            type="button"
-                            className="min-h-[44px] sm:min-h-[38px] text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-lg transition"
-                          >
-                            {isAr ? "إلغاء" : "Cancel"}
-                          </button>
-                          <button
-                            onClick={() => saveEdit(idx)}
-                            type="button"
-                            className="min-h-[44px] sm:min-h-[38px] text-xs px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg font-semibold transition"
-                          >
-                            {isAr ? "حفظ التعديلات" : "Save Changes"}
-                          </button>
+                          {/* Advanced Hotspot Policy: Pool, Address List, Queue Ordering, MAC Cookie */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                            <div>
+                              <label htmlFor={`${fid}-pool`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "Address Pool (اختياري)" : "Address Pool (Optional)"}
+                              </label>
+                              <input
+                                id={`${fid}-pool`}
+                                name="profileAddressPool"
+                                dir="ltr"
+                                type="text"
+                                placeholder="none"
+                                className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.addressPool || ""}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, addressPool: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-addrlist`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "Firewall Address-List" : "Firewall Address-List"}
+                              </label>
+                              <input
+                                id={`${fid}-addrlist`}
+                                name="profileAddressList"
+                                dir="ltr"
+                                type="text"
+                                placeholder="vip_clients"
+                                className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.addressList || ""}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, addressList: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-insert-before`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "ترتيب الطابور (Insert Queue)" : "Insert Queue Before"}
+                              </label>
+                              <select
+                                id={`${fid}-insert-before`}
+                                name="profileInsertQueueBefore"
+                                dir="ltr"
+                                className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                                value={current.insertQueueBefore || "first"}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, insertQueueBefore: e.target.value as "first" | "bottom" })}
+                              >
+                                <option value="first">first</option>
+                                <option value="bottom">bottom</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor={`${fid}-mac-to`} className="text-xs text-slate-300 mb-1 block">
+                                {isAr ? "مدة MAC Cookie" : "MAC Cookie Timeout"}
+                              </label>
+                              <input
+                                id={`${fid}-mac-to`}
+                                name="profileMacCookieTimeout"
+                                dir="ltr"
+                                type="text"
+                                placeholder="3d"
+                                disabled={!current.addMacCookie}
+                                className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded px-2 py-1 text-xs font-mono focus:ring-2 focus:ring-emerald-400 disabled:opacity-50"
+                                value={current.macCookieTimeout}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, macCookieTimeout: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-4 text-xs">
+                            <label htmlFor={`${fid}-add-mac`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer text-slate-200">
+                              <input
+                                id={`${fid}-add-mac`}
+                                name="profileAddMacCookie"
+                                type="checkbox"
+                                className="w-4 h-4 accent-emerald-500"
+                                checked={current.addMacCookie}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, addMacCookie: e.target.checked })}
+                              />
+                              <span>add-mac-cookie</span>
+                            </label>
+                            <label htmlFor={`${fid}-proxy`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer text-slate-200">
+                              <input
+                                id={`${fid}-proxy`}
+                                name="profileTransparentProxy"
+                                type="checkbox"
+                                className="w-4 h-4 accent-emerald-500"
+                                checked={Boolean(current.transparentProxy)}
+                                onChange={(e) => setTempProfile({ ...tempProfile!, transparentProxy: e.target.checked })}
+                              />
+                              <span>transparent-proxy</span>
+                            </label>
+                          </div>
                         </div>
+                      </details>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          onClick={cancelEdit}
+                          type="button"
+                          className="min-h-[44px] sm:min-h-[38px] text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-lg transition"
+                        >
+                          {isAr ? "إلغاء" : "Cancel"}
+                        </button>
+                        <button
+                          onClick={() => saveEdit(idx)}
+                          type="button"
+                          className="min-h-[44px] sm:min-h-[38px] text-xs px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg font-semibold transition"
+                        >
+                          {isAr ? "حفظ التعديلات" : "Save Changes"}
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -796,6 +871,12 @@ export default function SpeedProfilesTab({
                           <h3 className="font-semibold text-slate-100">
                             <bdi dir="auto">{profile.displayName}</bdi>
                           </h3>
+                          {profIssues.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950/70 border border-red-700/80 text-red-200 text-[11px] font-medium">
+                              <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                              <span>{isAr ? `${profIssues.length} خطأ` : `${profIssues.length} error`}</span>
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
                           <div>
@@ -841,6 +922,11 @@ export default function SpeedProfilesTab({
                             </div>
                           )}
                         </div>
+                        {profIssues.map((issue) => (
+                          <p key={issue.id} className="text-[11px] text-red-300">
+                            {isAr ? issue.messageAr : issue.messageEn}
+                          </p>
+                        ))}
                       </div>
 
                       <div className="flex gap-2 self-end sm:self-center">

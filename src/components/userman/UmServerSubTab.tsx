@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import type { HotspotConfig, UserManagerGroup } from "../../types";
+import type { ValidationIssue } from "../../utils/validation";
 import { Server, Key, Users, Hash, Plus, Trash2, Edit, Eye, EyeOff } from "lucide-react";
 import ToggleSwitch from "../ToggleSwitch";
 import ConfirmDialog from "../ConfirmDialog";
@@ -14,11 +15,12 @@ interface Props {
   onChange: (updates: Partial<HotspotConfig>) => void;
   lang: "ar" | "en";
   onDirtyChange?: (dirty: boolean) => void;
+  issues?: ValidationIssue[];
 }
 
 const OUTER_AUTH_OPTIONS = ["pap", "chap", "mschap1", "mschap2", "eap-tls", "eap-ttls", "eap-peap", "eap-mschap2"];
 
-export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }: Props) {
+export default function UmServerSubTab({ config, onChange, lang, onDirtyChange, issues = [] }: Props) {
   const isAr = lang === "ar";
   const isV7 = config.rosVersion === "v7";
   const isExternalRadius = config.radiusBackend === "external_radius";
@@ -29,6 +31,20 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<UserManagerGroup | null>(null);
   const [showRadiusSecret, setShowRadiusSecret] = useState(false);
   const [showAdminPass, setShowAdminPass] = useState(false);
+
+  const getFieldIssues = (field: string) =>
+    issues.filter((i) => i.tab === 4 && i.field === field);
+
+  const radiusIpIssues = getFieldIssues("radiusServerIp");
+  const radiusSrcIssues = getFieldIssues("radiusSrcAddress");
+  const radiusSecretIssues = getFieldIssues("radiusSecret");
+  const adminPassIssues = getFieldIssues("usermanAdminPass");
+
+  const getIssueBorderClass = (fieldIssues: ValidationIssue[]) => {
+    if (fieldIssues.some((i) => i.severity === "error")) return "border-red-500";
+    if (fieldIssues.length > 0) return "border-amber-500";
+    return "border-slate-700";
+  };
 
   useEffect(() => {
     onDirtyChange?.(editingGroupId !== null);
@@ -73,10 +89,10 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-radius-ip" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isExternalRadius
               ? (isAr ? "عنوان IP لخادم RADIUS الخارجي" : "External RADIUS Server IP")
               : (isAr ? "عنوان IP الخاص بسيرفر اليوزر مانجر" : "RADIUS Server IP Address")}
@@ -86,21 +102,30 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
             name="radiusServerIp"
             dir="ltr"
             type="text"
-            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+            aria-invalid={radiusIpIssues.some((i) => i.severity === "error")}
+            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono ${getIssueBorderClass(radiusIpIssues)}`}
             value={config.radiusServerIp}
             onChange={(e) => onChange({ radiusServerIp: e.target.value })}
             placeholder={isExternalRadius ? "192.168.1.200" : "127.0.0.1"}
           />
-          <span className="text-xs text-slate-400">
-            {isExternalRadius
-              ? (isAr ? "عنوان IP الخاص بالخادم المستقل (FreeRADIUS أو برنامج الإدارة)" : "IPv4 address of your standalone external RADIUS server")
-              : (isAr ? "اكتب 127.0.0.1 إذا كان اليوزر مانجر محلياً على نفس الراوتر" : "Use 127.0.0.1 when running locally on the same MikroTik")}
-          </span>
+          {radiusIpIssues.length > 0 ? (
+            radiusIpIssues.map((issue) => (
+              <span key={issue.id} className={`text-xs ${issue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                {isAr ? issue.messageAr : issue.messageEn}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-slate-400">
+              {isExternalRadius
+                ? (isAr ? "عنوان IP الخاص بالخادم المستقل (FreeRADIUS أو برنامج الإدارة)" : "IPv4 address of your standalone external RADIUS server")
+                : (isAr ? "اكتب 127.0.0.1 إذا كان اليوزر مانجر محلياً على نفس الراوتر" : "Use 127.0.0.1 when running locally on the same MikroTik")}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-radius-secret" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Key className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Key className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "كلمة سر الربط (Shared Secret)" : "RADIUS Shared Secret"}
           </label>
           <div className="relative flex items-center">
@@ -109,7 +134,8 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
               name="radiusSecret"
               dir="ltr"
               type={showRadiusSecret ? "text" : "password"}
-              className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 pe-10 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+              aria-invalid={radiusSecretIssues.some((i) => i.severity === "error")}
+              className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-3 pe-12 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono ${getIssueBorderClass(radiusSecretIssues)}`}
               value={config.radiusSecret}
               onChange={(e) => onChange({ radiusSecret: e.target.value })}
               placeholder="radius123"
@@ -118,20 +144,28 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
               type="button"
               onClick={() => setShowRadiusSecret((prev) => !prev)}
               aria-label={showRadiusSecret ? (isAr ? "إخفاء كلمة السر" : "Hide secret") : (isAr ? "إظهار كلمة السر" : "Show secret")}
-              className="absolute end-1 min-h-[36px] min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
+              className="absolute end-0.5 min-h-[44px] min-w-[44px] sm:min-h-[38px] sm:min-w-[38px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
             >
               {showRadiusSecret ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
             </button>
           </div>
-          <span className="text-xs text-slate-400">
-            {isAr ? "كلمة السر المتطابقة بين الهوتسبوت وخادم RADIUS" : "Shared secret authenticating RADIUS packets"}
-          </span>
+          {radiusSecretIssues.length > 0 ? (
+            radiusSecretIssues.map((issue) => (
+              <span key={issue.id} className={`text-xs ${issue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                {isAr ? issue.messageAr : issue.messageEn}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-slate-400">
+              {isAr ? "كلمة السر المتطابقة بين الهوتسبوت وخادم RADIUS" : "Shared secret authenticating RADIUS packets"}
+            </span>
+          )}
         </div>
 
         {!isExternalRadius && (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="um-router-name" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-              <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
               {isAr ? "اسم الراوتر في اليوزر مانجر" : "Router Name in User Manager"}
             </label>
             <input
@@ -149,7 +183,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-auth-port" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Hash className="w-4 h-4 text-slate-400" aria-hidden="true" />
             <span>{isAr ? "منفذ المصادقة (Auth Port)" : "RADIUS Auth Port"}</span>
           </label>
           <input
@@ -165,7 +199,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-acct-port" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Hash className="w-4 h-4 text-slate-400" aria-hidden="true" />
             <span>{isAr ? "منفذ المحاسبة (Accounting Port)" : "RADIUS Accounting Port"}</span>
           </label>
           <input
@@ -181,7 +215,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-coa-port" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Hash className="w-4 h-4 text-slate-400" aria-hidden="true" />
             <span>{isAr ? "منفذ CoA (فصل الكارت عند الانتهاء)" : "CoA Disconnect Port"}</span>
           </label>
           <input
@@ -197,7 +231,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-radius-timeout" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
             <span>{isAr ? "مهلة الاستجابة (Timeout)" : "RADIUS Timeout"}</span>
           </label>
           <input
@@ -215,7 +249,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
         {(isExternalRadius || config.radiusServerIp.trim() !== "127.0.0.1") && (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="um-radius-src" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-              <Server className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+              <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
               <span>{isAr ? "عنوان المصدر للراوتر (src-address - اختياري)" : "NAS Source IP (src-address - Optional)"}</span>
             </label>
             <input
@@ -223,11 +257,17 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
               name="radiusSrcAddress"
               dir="ltr"
               type="text"
-              className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+              aria-invalid={radiusSrcIssues.some((i) => i.severity === "error")}
+              className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono ${getIssueBorderClass(radiusSrcIssues)}`}
               value={config.radiusSrcAddress || ""}
               onChange={(e) => onChange({ radiusSrcAddress: e.target.value })}
               placeholder="192.168.1.2"
             />
+            {radiusSrcIssues.map((issue) => (
+              <span key={issue.id} className={`text-xs ${issue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                {isAr ? issue.messageAr : issue.messageEn}
+              </span>
+            ))}
           </div>
         )}
       </div>
@@ -273,7 +313,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
       {isExternalRadius ? (
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
           <h3 className="text-sm font-medium text-cyan-300 flex items-center gap-2">
-            <Server className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+            <Server className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "ملخص الربط مع خادم RADIUS الخارجي" : "External RADIUS NAS Integration Summary"}
           </h3>
           <p className="text-slate-300 leading-relaxed">
@@ -289,10 +329,10 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
       ) : !isV7 ? (
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
           <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-            <Users className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <Users className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {isAr ? "حساب مدير اليوزر مانجر المالك (ROS v6 Customer)" : "User Manager Master Owner (v6 Customer)"}
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="um-admin-user" className="text-slate-300 text-xs">{isAr ? "اسم مستخدم المالك (Login)" : "Owner Login"}</label>
               <input
@@ -313,7 +353,8 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                   name="usermanAdminPass"
                   dir="ltr"
                   type={showAdminPass ? "text" : "password"}
-                  className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 pe-10 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400"
+                  aria-invalid={adminPassIssues.some((i) => i.severity === "error")}
+                  className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-3 pe-12 py-1.5 text-sm font-mono focus:ring-2 focus:ring-emerald-400 ${getIssueBorderClass(adminPassIssues)}`}
                   value={config.usermanAdminPass}
                   onChange={(e) => onChange({ usermanAdminPass: e.target.value })}
                 />
@@ -321,11 +362,16 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                   type="button"
                   onClick={() => setShowAdminPass((prev) => !prev)}
                   aria-label={showAdminPass ? (isAr ? "إخفاء كلمة المرور" : "Hide password") : (isAr ? "إظهار كلمة المرور" : "Show password")}
-                  className="absolute end-1 min-h-[36px] min-w-[36px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
+                  className="absolute end-0.5 min-h-[44px] min-w-[44px] sm:min-h-[38px] sm:min-w-[38px] inline-flex items-center justify-center text-slate-400 hover:text-slate-100 rounded"
                 >
                   {showAdminPass ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                 </button>
               </div>
+              {adminPassIssues.map((issue) => (
+                <span key={issue.id} className={`text-xs ${issue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                  {isAr ? issue.messageAr : issue.messageEn}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -334,7 +380,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-                <Users className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <Users className="w-4 h-4 text-slate-400" aria-hidden="true" />
                 {isAr ? "مجموعات المستخدمين وخصائص RADIUS (v7 User Groups)" : "v7 User Groups (/user-manager user group)"}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -346,7 +392,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
             <button
               type="button"
               onClick={handleAddGroup}
-              className="min-h-[44px] sm:min-h-[36px] flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg font-semibold transition"
+              className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg font-semibold transition"
             >
               <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               {isAr ? "إضافة مجموعة" : "Add Group"}
@@ -354,11 +400,23 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
           </div>
 
           <div className="space-y-3">
-            {umGroups.map((grp) => {
+            {umGroups.map((grp, idx) => {
               const isEditing = editingGroupId === grp.id;
               const cur = isEditing && tempGroup ? tempGroup : grp;
+              const grpIssues = getFieldIssues(`umGrp_${idx}_auth`);
+              const hasGrpError = grpIssues.some((i) => i.severity === "error");
+
               return (
-                <div key={grp.id} className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                <div
+                  key={grp.id}
+                  className={`bg-slate-950/60 border rounded-xl p-3 ${
+                    hasGrpError
+                      ? "border-red-500/80"
+                      : grpIssues.length > 0
+                        ? "border-amber-500/80"
+                        : "border-slate-800"
+                  }`}
+                >
                   {isEditing && tempGroup ? (
                     <div className="space-y-3 text-xs">
                       <div className="bg-amber-950/50 border border-amber-700/70 text-amber-200 rounded-lg px-3 py-2 text-xs">
@@ -376,7 +434,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                             id={`grp-${grp.id}-name`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
+                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
                             value={cur.name}
                             onChange={(e) => setTempGroup({ ...tempGroup, name: e.target.value })}
                           />
@@ -390,7 +448,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                             dir="ltr"
                             type="text"
                             placeholder="default or hs-2M"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
+                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
                             value={cur.mikrotikGroup || ""}
                             onChange={(e) => setTempGroup({ ...tempGroup, mikrotikGroup: e.target.value })}
                           />
@@ -404,7 +462,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                             dir="ltr"
                             type="text"
                             placeholder="um_vip"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
+                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
                             value={cur.addressList || ""}
                             onChange={(e) => setTempGroup({ ...tempGroup, addressList: e.target.value })}
                           />
@@ -418,7 +476,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                             dir="ltr"
                             type="text"
                             placeholder="hs-pool-ether2"
-                            className="w-full min-h-[44px] sm:min-h-[36px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
+                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 font-mono"
                             value={cur.framedPool || ""}
                             onChange={(e) => setTempGroup({ ...tempGroup, framedPool: e.target.value })}
                           />
@@ -427,23 +485,34 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
 
                       <div>
                         <span className="text-slate-300 mb-1.5 block">outer-auths:</span>
-                        <div className="flex flex-wrap gap-1.5" dir="ltr">
+                        <div
+                          className={`flex flex-wrap gap-1.5 p-2 rounded-lg border ${
+                            hasGrpError
+                              ? "border-red-500/80 bg-red-950/20"
+                              : grpIssues.length > 0
+                                ? "border-amber-500/80 bg-amber-950/20"
+                                : "border-transparent p-0"
+                          }`}
+                          dir="ltr"
+                        >
                           {OUTER_AUTH_OPTIONS.map((auth) => {
                             const active = cur.outerAuths.includes(auth);
                             return (
                               <button
                                 key={auth}
+                                name={`umGrp_${idx}_auth`}
                                 type="button"
+                                aria-pressed={active}
                                 onClick={() => {
                                   const next = active
                                     ? cur.outerAuths.filter((a) => a !== auth)
                                     : [...cur.outerAuths, auth];
                                   setTempGroup({ ...tempGroup, outerAuths: next });
                                 }}
-                                className={`min-h-[36px] px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
+                                className={`min-h-[44px] sm:min-h-[38px] px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
                                   active
                                     ? "bg-emerald-950 border-emerald-500 text-emerald-300"
-                                    : "bg-slate-900 border-slate-700 text-slate-400"
+                                    : "bg-slate-900 border-slate-700 text-slate-300 hover:text-white"
                                 }`}
                               >
                                 {auth}
@@ -451,20 +520,25 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                             );
                           })}
                         </div>
+                        {grpIssues.map((issue) => (
+                          <p key={issue.id} className={`text-[11px] mt-1.5 ${issue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                            {isAr ? issue.messageAr : issue.messageEn}
+                          </p>
+                        ))}
                       </div>
 
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => { setEditingGroupId(null); setTempGroup(null); }}
-                          className="min-h-[40px] px-3 py-1.5 bg-slate-800 text-slate-200 rounded-lg"
+                          className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 bg-slate-800 text-slate-200 rounded-lg"
                         >
                           {isAr ? "إلغاء" : "Cancel"}
                         </button>
                         <button
                           type="button"
                           onClick={saveGroup}
-                          className="min-h-[40px] px-3.5 py-1.5 bg-emerald-500 text-slate-950 font-semibold rounded-lg"
+                          className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 bg-emerald-500 text-slate-950 font-semibold rounded-lg"
                         >
                           {isAr ? "حفظ" : "Save"}
                         </button>
@@ -484,13 +558,18 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                         <div className="text-[11px] text-slate-400 font-mono" dir="ltr">
                           outer-auths: {grp.outerAuths.join(",") || "none"}
                         </div>
+                        {grpIssues.map((issue) => (
+                          <p key={issue.id} className={`text-[11px] ${issue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                            {isAr ? issue.messageAr : issue.messageEn}
+                          </p>
+                        ))}
                       </div>
                       <div className="flex gap-1.5">
                         <button
                           type="button"
                           onClick={() => { setEditingGroupId(grp.id); setTempGroup({ ...grp }); }}
                           aria-label={isAr ? `تعديل ${grp.name}` : `Edit ${grp.name}`}
-                          className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center border border-slate-700 rounded-lg text-slate-300 hover:text-white"
+                          className="min-h-[44px] min-w-[44px] sm:min-h-[38px] sm:min-w-[38px] inline-flex items-center justify-center border border-slate-700 rounded-lg text-slate-300 hover:text-white"
                         >
                           <Edit className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
@@ -498,7 +577,7 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
                           type="button"
                           onClick={() => setConfirmDeleteGroup(grp)}
                           aria-label={isAr ? `حذف ${grp.name}` : `Delete ${grp.name}`}
-                          className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center border border-slate-800 rounded-lg text-slate-300 hover:text-red-300"
+                          className="min-h-[44px] min-w-[44px] sm:min-h-[38px] sm:min-w-[38px] inline-flex items-center justify-center border border-slate-800 rounded-lg text-slate-300 hover:text-red-300"
                         >
                           <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>

@@ -106,34 +106,44 @@ export interface PortalThemeColors {
   primaryBg: string;
   accentColor: string;
   accentHover: string;
+  accentText: string;
+  linkColor: string;
 }
 
 export function getPortalThemeColors(theme?: HotspotConfig["loginTheme"]): PortalThemeColors {
   if (theme === "blue") {
     return {
       primaryBg: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)",
-      accentColor: "#3b82f6",
-      accentHover: "#2563eb",
+      accentColor: "#1d4ed8",
+      accentHover: "#1e40af",
+      accentText: "#ffffff",
+      linkColor: "#60a5fa",
     };
   }
   if (theme === "purple") {
     return {
       primaryBg: "linear-gradient(135deg, #0f172a 0%, #4c1d95 100%)",
-      accentColor: "#8b5cf6",
-      accentHover: "#7c3aed",
+      accentColor: "#6d28d9",
+      accentHover: "#5b21b6",
+      accentText: "#ffffff",
+      linkColor: "#c084fc",
     };
   }
   if (theme === "dark") {
     return {
       primaryBg: "linear-gradient(135deg, #020617 0%, #0f172a 100%)",
       accentColor: "#22c55e",
-      accentHover: "#16a34a",
+      accentHover: "#4ade80",
+      accentText: "#020617",
+      linkColor: "#4ade80",
     };
   }
   return {
     primaryBg: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
     accentColor: "#10b981",
-    accentHover: "#059669",
+    accentHover: "#34d399",
+    accentText: "#020617",
+    linkColor: "#34d399",
   };
 }
 
@@ -213,14 +223,13 @@ function renderPortalShell(params: {
         }
 
         .login-card {
-            background: rgba(30, 41, 59, 0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #0f172a;
+            border: 1px solid rgba(148, 163, 184, 0.25);
             border-radius: 20px;
             width: 100%;
             max-width: 400px;
             padding: 32px 24px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.55);
             text-align: center;
         }
 
@@ -233,13 +242,13 @@ function renderPortalShell(params: {
             align-items: center;
             justify-content: center;
             margin: 0 auto 16px auto;
-            box-shadow: 0 10px 20px -5px ${colors.accentColor}80;
+            box-shadow: none;
         }
 
         .logo-icon svg {
             width: 32px;
             height: 32px;
-            fill: #ffffff;
+            fill: ${colors.accentText};
         }
 
         h1 {
@@ -251,24 +260,25 @@ function renderPortalShell(params: {
 
         p.subtitle {
             font-size: 13px;
-            color: #94a3b8;
+            color: #cbd5e1;
             margin-bottom: 24px;
             line-height: 1.5;
         }
 
         .submit-btn {
             width: 100%;
+            min-height: 48px;
             padding: 14px;
             background: ${colors.accentColor};
             border: none;
             border-radius: 10px;
-            color: #ffffff;
+            color: ${colors.accentText};
             font-size: 15px;
             font-weight: 700;
             cursor: pointer;
             transition: background 0.2s;
             margin-top: 8px;
-            box-shadow: 0 4px 12px ${colors.accentColor}60;
+            box-shadow: none;
             display: inline-block;
             text-decoration: none;
             text-align: center;
@@ -280,9 +290,10 @@ function renderPortalShell(params: {
 
         .secondary-btn {
             width: 100%;
+            min-height: 44px;
             padding: 12px;
             background: rgba(15, 23, 42, 0.75);
-            border: 1px solid rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(148, 163, 184, 0.35);
             border-radius: 10px;
             color: #e2e8f0;
             font-size: 14px;
@@ -364,7 +375,7 @@ function renderPortalShell(params: {
         }
 
         .footer-info a {
-            color: ${colors.accentColor};
+            color: ${colors.linkColor};
             text-decoration: none;
             font-weight: 600;
         }${extraStyles ? `\n${extraStyles}` : ""}
@@ -383,7 +394,7 @@ ${cardContent}
 
         <div class="footer-info">
             ${supportText} <a href="tel:${telHref}">${contact}</a><br>
-            <span>www.${dnsName}</span>
+            <a href="http://${dnsName}/status" dir="ltr" style="display:inline-block;margin-top:6px;">http://${dnsName}/status</a>
         </div>
     </div>
 
@@ -408,6 +419,7 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
         userPlaceholder: "اسم المستخدم",
         passLabel: "كلمة المرور",
         passPlaceholder: "كلمة المرور",
+        togglePass: "إظهار أو إخفاء كلمة المرور",
         submitBtn: "تسجيل الدخول الآن",
         trialLink: "اضغط هنا لتجربة الإنترنت مجاناً",
       }
@@ -420,6 +432,7 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
         userPlaceholder: "Username",
         passLabel: "Password",
         passPlaceholder: "Password",
+        togglePass: "Show or hide password",
         submitBtn: "Sign In",
         trialLink: "Click here for Free Trial",
       };
@@ -445,10 +458,11 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
 
         .tab-btn {
             flex: 1;
+            min-height: 44px;
             padding: 8px 12px;
             border: none;
             background: transparent;
-            color: #94a3b8;
+            color: #cbd5e1;
             font-size: 13px;
             font-weight: 600;
             border-radius: 8px;
@@ -458,7 +472,7 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
 
         .tab-btn.active {
             background: ${colors.accentColor};
-            color: #ffffff;
+            color: ${colors.accentText};
         }` : ""}
 
         .input-group {
@@ -476,21 +490,63 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
 
         .input-field {
             width: 100%;
+            min-height: 48px;
             padding: 12px 16px;
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: #020617;
+            border: 1px solid #64748b;
             border-radius: 10px;
             color: #ffffff;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s;
+            font-size: 16px;
+            outline: 2px solid transparent;
+            transition: border-color 0.2s, outline-color 0.2s;
             direction: ltr;
-            text-align: center;
+            text-align: left;
         }
 
-        .input-field:focus {
-            border-color: ${colors.accentColor};
-            box-shadow: 0 0 0 2px ${colors.accentColor}40;
+        .input-field:focus-visible {
+            border-color: ${colors.linkColor};
+            outline: 2px solid ${colors.linkColor};
+            outline-offset: 1px;
+        }
+
+        .voucher-input {
+            text-align: center;
+            letter-spacing: 0.04em;
+            font-weight: 600;
+        }
+
+        .password-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .password-wrap .input-field {
+            padding-${isAr ? "left" : "right"}: 48px;
+        }
+
+        .password-toggle {
+            position: absolute;
+            ${isAr ? "left" : "right"}: 4px;
+            min-width: 44px;
+            min-height: 44px;
+            background: transparent;
+            border: none;
+            color: #cbd5e1;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+        }
+
+        .password-toggle:hover {
+            color: #ffffff;
+        }
+
+        .password-toggle:focus-visible {
+            outline: 2px solid ${colors.linkColor};
+            outline-offset: 1px;
         }`;
 
   const tabsHtml =
@@ -532,32 +588,36 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
       : "";
 
   const voucherPasswordAssignment = voucherPasswordMode === "blank" ? "''" : "vCode";
+  const passwordFieldHtml = `<div class="password-wrap">
+                    <input type="password" id="passwordInput" class="input-field" placeholder="${labels.passPlaceholder}" autocomplete="current-password">
+                    <button type="button" class="password-toggle" onclick="togglePassVisibility(this)" aria-label="${labels.togglePass}" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                </div>`;
 
   const formFieldsHtml =
     portalLoginMode === "voucher_only"
       ? `            <div id="voucherGroup" class="input-group">
                 <label for="voucherCode">${labels.voucherLabel}</label>
-                <input type="text" id="voucherCode" class="input-field" placeholder="${labels.voucherPlaceholder}" required autocomplete="off">
+                <input type="text" id="voucherCode" class="input-field voucher-input" placeholder="${labels.voucherPlaceholder}" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>`
       : portalLoginMode === "user_pass_only"
         ? `            <div id="userPassGroup" class="input-group">
                 <label for="usernameInput">${labels.userLabel}</label>
-                <input type="text" id="usernameInput" class="input-field" placeholder="${labels.userPlaceholder}" style="margin-bottom: 12px;" required autocomplete="username">
+                <input type="text" id="usernameInput" class="input-field" placeholder="${labels.userPlaceholder}" style="margin-bottom: 12px;" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
                 
                 <label for="passwordInput">${labels.passLabel}</label>
-                <input type="password" id="passwordInput" class="input-field" placeholder="${labels.passPlaceholder}" autocomplete="current-password">
+                ${passwordFieldHtml}
             </div>`
         : `            <div id="voucherGroup" class="input-group">
                 <label for="voucherCode">${labels.voucherLabel}</label>
-                <input type="text" id="voucherCode" class="input-field" placeholder="${labels.voucherPlaceholder}" required autocomplete="off">
+                <input type="text" id="voucherCode" class="input-field voucher-input" placeholder="${labels.voucherPlaceholder}" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
 
             <div id="userPassGroup" class="input-group" style="display: none;">
                 <label for="usernameInput">${labels.userLabel}</label>
-                <input type="text" id="usernameInput" class="input-field" placeholder="${labels.userPlaceholder}" style="margin-bottom: 12px;" autocomplete="username">
+                <input type="text" id="usernameInput" class="input-field" placeholder="${labels.userPlaceholder}" style="margin-bottom: 12px;" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
                 
                 <label for="passwordInput">${labels.passLabel}</label>
-                <input type="password" id="passwordInput" class="input-field" placeholder="${labels.passPlaceholder}" autocomplete="current-password">
+                ${passwordFieldHtml}
             </div>`;
 
   const cardContent = `        <h1>${title}</h1>
@@ -580,6 +640,13 @@ ${tabsHtml}
         <script type="text/javascript">
         <!--
             ${INLINE_MD5_RUNTIME}
+            function togglePassVisibility(btn) {
+                var p = document.getElementById('passwordInput');
+                if (!p) return;
+                var show = p.type === 'password';
+                p.type = show ? 'text' : 'password';
+                btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+            }
             function doLogin() {
                 var form = document.sendin;
                 var mode = document.getElementById('loginMode').value;
@@ -617,7 +684,7 @@ ${formFieldsHtml}
 
         $(if trial == 'yes')
         <div style="margin-top: 14px;">
-            <a href="$(link-login-only)?dst=$(link-orig-esc)&amp;username=T-$(mac-esc)" style="color: ${colors.accentColor}; font-size: 13px; font-weight: 600; text-decoration: none;">
+            <a href="$(link-login-only)?dst=$(link-orig-esc)&amp;username=T-$(mac-esc)" style="color: ${colors.linkColor}; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px;">
                 ${labels.trialLink}
             </a>
         </div>
@@ -664,11 +731,12 @@ export function generateHotspotStatusPageHtml(config: HotspotConfig, lang: "ar" 
 
   const extraStyles = `
         .danger-btn {
-            background: #ef4444;
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+            background: #b91c1c;
+            color: #ffffff;
+            box-shadow: none;
         }
         .danger-btn:hover {
-            background: #dc2626;
+            background: #991b1b;
         }`;
 
   const cardContent = `        <div class="status-badge">${labels.connectedBadge}</div>

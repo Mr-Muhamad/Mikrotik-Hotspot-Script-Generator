@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import type { HotspotConfig, VlanConfig } from "../types";
+import type { ValidationIssue } from "../utils/validation";
 import { calculateSubnetPool } from "../utils/scriptGenerator";
 import { Layers, Plus, Trash2, Edit } from "lucide-react";
 import ToggleSwitch from "./ToggleSwitch";
@@ -15,9 +16,10 @@ interface Props {
   onChange: (updates: Partial<HotspotConfig>) => void;
   lang: "ar" | "en";
   onDirtyChange?: (dirty: boolean) => void;
+  issues?: ValidationIssue[];
 }
 
-export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }: Props) {
+export default function VlanConfigTab({ config, onChange, lang, onDirtyChange, issues = [] }: Props) {
   const isAr = lang === "ar";
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempVlan, setTempVlan] = useState<VlanConfig | null>(null);
@@ -185,9 +187,29 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
               <p className="text-slate-300 text-sm">{isAr ? "لم تقم بإضافة أية شبكات VLAN بعد. اضغط على إضافة للتخصيص." : "No VLAN interfaces configured yet."}</p>
             </div>
           ) : (
-            config.vlans.map((vlan) => {
+            config.vlans.map((vlan, idx) => {
               const isEditing = editingId === vlan.id;
               const current = isEditing && tempVlan ? tempVlan : vlan;
+              const getVlanIssue = (suffix: string) =>
+                issues.find((i) => i.tab === 1 && i.field === `vlan_${idx}_${suffix}`);
+              const vlanIssues = issues.filter(
+                (i) =>
+                  i.tab === 1 &&
+                  (i.field === `vlan_${idx}_vlanId` ||
+                    i.field === `vlan_${idx}_name` ||
+                    i.field === `vlan_${idx}_gatewayIp` ||
+                    i.field === `vlan_${idx}_pool` ||
+                    i.field === `vlan_${idx}_parentInterface` ||
+                    i.field === `vlan_${idx}_dhcpEnabled`)
+              );
+              const nameError = getVlanIssue("name");
+              const vlanIdError = getVlanIssue("vlanId");
+              const parentIssue = getVlanIssue("parentInterface");
+              const gwError = getVlanIssue("gatewayIp");
+              const poolError = getVlanIssue("pool");
+              const dhcpIssue = getVlanIssue("dhcpEnabled");
+              const hasVlanError = vlanIssues.some((i) => i.severity === "error");
+              const hasVlanWarning = !hasVlanError && vlanIssues.length > 0;
 
               return (
                 <div
@@ -195,7 +217,11 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                   className={`border rounded-xl p-4 transition-all ${
                     isEditing
                       ? "bg-slate-800/80 border-emerald-500/60 shadow-md"
-                      : "bg-slate-900/40 border-slate-800 hover:bg-slate-900/60"
+                      : hasVlanError
+                        ? "bg-slate-900/40 border-red-500/70 hover:bg-slate-900/60"
+                        : hasVlanWarning
+                          ? "bg-slate-900/40 border-amber-500/60 hover:bg-slate-900/60"
+                          : "bg-slate-900/40 border-slate-800 hover:bg-slate-900/60"
                   }`}
                 >
                   {isEditing ? (
@@ -206,56 +232,83 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                           ? "تعديل غير محفوظ: اضغط حفظ لتطبيق التغيير على السكربت"
                           : "Unsaved edit: click Save to apply changes to the script"}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
                         <div>
                           <label htmlFor={`vlan-${vlan.id}-name`} className="text-xs text-slate-300 mb-1 block">{isAr ? "اسم الفيلان (Interface Name)" : "VLAN Name"}</label>
                           <input
                             id={`vlan-${vlan.id}-name`}
-                            name="vlanName"
+                            name={`vlan_${idx}_name`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={Boolean(nameError)}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              nameError ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={current.name}
                             onChange={(e) => setTempVlan({ ...tempVlan!, name: e.target.value })}
                           />
+                          {nameError && (
+                            <span className="text-xs text-red-300 mt-1 block">{isAr ? nameError.messageAr : nameError.messageEn}</span>
+                          )}
                         </div>
                         <div>
                           <label htmlFor={`vlan-${vlan.id}-tag`} className="text-xs text-slate-300 mb-1 block">{isAr ? "رقم الفيلان (VLAN ID)" : "VLAN ID (Tag)"}</label>
                           <input
                             id={`vlan-${vlan.id}-tag`}
-                            name="vlanTagId"
+                            name={`vlan_${idx}_vlanId`}
                             dir="ltr"
                             type="number"
                             min="1"
                             max="4094"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={Boolean(vlanIdError)}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              vlanIdError ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={current.vlanId}
                             onChange={(e) => setTempVlan({ ...tempVlan!, vlanId: parseInt(e.target.value, 10) || 10 })}
                           />
+                          {vlanIdError && (
+                            <span className="text-xs text-red-300 mt-1 block">{isAr ? vlanIdError.messageAr : vlanIdError.messageEn}</span>
+                          )}
                         </div>
                         <div>
                           <label htmlFor={`vlan-${vlan.id}-parent`} className="text-xs text-slate-300 mb-1 block">{isAr ? "المنفذ الرئيسي (Parent Interface)" : "Parent Interface"}</label>
                           <input
                             id={`vlan-${vlan.id}-parent`}
-                            name="vlanParentInterface"
+                            name={`vlan_${idx}_parentInterface`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={parentIssue?.severity === "error"}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-900 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              parentIssue
+                                ? parentIssue.severity === "error"
+                                  ? "border-red-500"
+                                  : "border-amber-500/80"
+                                : "border-slate-700"
+                            }`}
                             value={current.parentInterface}
                             onChange={(e) => setTempVlan({ ...tempVlan!, parentInterface: e.target.value })}
                           />
+                          {parentIssue && (
+                            <span className={`text-xs mt-1 block ${parentIssue.severity === "error" ? "text-red-300" : "text-amber-300"}`}>
+                              {isAr ? parentIssue.messageAr : parentIssue.messageEn}
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start bg-slate-900/60 p-3 rounded-lg border border-slate-800">
                         <div>
                           <label htmlFor={`vlan-${vlan.id}-gw`} className="text-xs text-slate-200 mb-1 block">{isAr ? "عنوان الجيتواي (Gateway IP)" : "Gateway IP"}</label>
                           <input
                             id={`vlan-${vlan.id}-gw`}
-                            name="vlanGatewayIp"
+                            name={`vlan_${idx}_gatewayIp`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={Boolean(gwError)}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              gwError ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={current.gatewayIp}
                             onChange={(e) => {
                               const ip = e.target.value;
@@ -267,6 +320,9 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                               });
                             }}
                           />
+                          {gwError && (
+                            <span className="text-xs text-red-300 mt-1 block">{isAr ? gwError.messageAr : gwError.messageEn}</span>
+                          )}
                         </div>
                         <div>
                           <label htmlFor={`vlan-${vlan.id}-mask`} className="text-xs text-slate-200 mb-1 block">{isAr ? "قناع الشبكة (Subnet)" : "Subnet Mask"}</label>
@@ -296,13 +352,19 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                           <label htmlFor={`vlan-${vlan.id}-pool-start`} className="text-xs text-slate-200 mb-1 block">{isAr ? "بداية توزيع DHCP" : "DHCP Pool Start"}</label>
                           <input
                             id={`vlan-${vlan.id}-pool-start`}
-                            name="vlanPoolStart"
+                            name={`vlan_${idx}_pool`}
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={Boolean(poolError)}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              poolError ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={current.poolStart}
                             onChange={(e) => setTempVlan({ ...tempVlan!, poolStart: e.target.value })}
                           />
+                          {poolError && (
+                            <span className="text-xs text-red-300 mt-1 block">{isAr ? poolError.messageAr : poolError.messageEn}</span>
+                          )}
                         </div>
                         <div>
                           <label htmlFor={`vlan-${vlan.id}-pool-end`} className="text-xs text-slate-200 mb-1 block">{isAr ? "نهاية توزيع DHCP" : "DHCP Pool End"}</label>
@@ -311,37 +373,45 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                             name="vlanPoolEnd"
                             dir="ltr"
                             type="text"
-                            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400"
+                            aria-invalid={Boolean(poolError)}
+                            className={`w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:ring-2 focus:ring-emerald-400 ${
+                              poolError ? "border-red-500" : "border-slate-700"
+                            }`}
                             value={current.poolEnd}
                             onChange={(e) => setTempVlan({ ...tempVlan!, poolEnd: e.target.value })}
                           />
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-4 text-xs">
-                        <label htmlFor={`vlan-${vlan.id}-dhcp`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
-                          <input
-                            id={`vlan-${vlan.id}-dhcp`}
-                            name="vlanDhcpEnabled"
-                            type="checkbox"
-                            className="w-4 h-4 flex-shrink-0 accent-emerald-500"
-                            checked={current.dhcpEnabled}
-                            onChange={(e) => setTempVlan({ ...tempVlan!, dhcpEnabled: e.target.checked })}
-                          />
-                          <span>{isAr ? "تفعيل سيرفر DHCP لهذا الفيلان" : "Enable DHCP Server"}</span>
-                        </label>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                          <label htmlFor={`vlan-${vlan.id}-dhcp`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
+                            <input
+                              id={`vlan-${vlan.id}-dhcp`}
+                              name={`vlan_${idx}_dhcpEnabled`}
+                              type="checkbox"
+                              className="w-4 h-4 flex-shrink-0 accent-emerald-500"
+                              checked={current.dhcpEnabled}
+                              onChange={(e) => setTempVlan({ ...tempVlan!, dhcpEnabled: e.target.checked })}
+                            />
+                            <span>{isAr ? "تفعيل سيرفر DHCP لهذا الفيلان" : "Enable DHCP Server"}</span>
+                          </label>
 
-                        <label htmlFor={`vlan-${vlan.id}-hotspot`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
-                          <input
-                            id={`vlan-${vlan.id}-hotspot`}
-                            name="vlanEnableHotspot"
-                            type="checkbox"
-                            className="w-4 h-4 flex-shrink-0 accent-emerald-500"
-                            checked={current.enableHotspotOnVlan}
-                            onChange={(e) => setTempVlan({ ...tempVlan!, enableHotspotOnVlan: e.target.checked })}
-                          />
-                          <span>{isAr ? "تفعيل خدمة الهوت سبوت على هذا الفيلان" : "Bind Hotspot Server to this VLAN"}</span>
-                        </label>
+                          <label htmlFor={`vlan-${vlan.id}-hotspot`} className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
+                            <input
+                              id={`vlan-${vlan.id}-hotspot`}
+                              name="vlanEnableHotspot"
+                              type="checkbox"
+                              className="w-4 h-4 flex-shrink-0 accent-emerald-500"
+                              checked={current.enableHotspotOnVlan}
+                              onChange={(e) => setTempVlan({ ...tempVlan!, enableHotspotOnVlan: e.target.checked })}
+                            />
+                            <span>{isAr ? "تفعيل خدمة الهوت سبوت على هذا الفيلان" : "Bind Hotspot Server to this VLAN"}</span>
+                          </label>
+                        </div>
+                        {dhcpIssue && (
+                          <span className="text-xs text-amber-300 block">{isAr ? dhcpIssue.messageAr : dhcpIssue.messageEn}</span>
+                        )}
                       </div>
 
                       {current.enableHotspotOnVlan && (
@@ -426,6 +496,19 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                           <span className="text-xs text-slate-400 font-mono">
                             ({isAr ? "على المنفذ:" : "on"} <bdi dir="ltr">{vlan.parentInterface}</bdi>)
                           </span>
+                          {vlanIssues.length > 0 && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                                hasVlanError
+                                  ? "bg-red-950/70 border-red-700 text-red-200"
+                                  : "bg-amber-950/70 border-amber-700 text-amber-200"
+                              }`}
+                            >
+                              {hasVlanError
+                                ? (isAr ? `${vlanIssues.length} خطأ` : `${vlanIssues.length} issue(s)`)
+                                : (isAr ? `${vlanIssues.length} تنبيه` : `${vlanIssues.length} warning(s)`)}
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
                           <div>{isAr ? "الجيتواي:" : "Gateway:"} <bdi dir="ltr" className="text-slate-100 font-mono">{vlan.gatewayIp}/{vlan.subnetMask}</bdi></div>
@@ -434,6 +517,11 @@ export default function VlanConfigTab({ config, onChange, lang, onDirtyChange }:
                             <span className="text-emerald-400 font-semibold">{isAr ? "• الهوت سبوت مفعّل" : "• Hotspot Bound"}</span>
                           )}
                         </div>
+                        {vlanIssues.length > 0 && (
+                          <div className={`text-xs pt-0.5 ${hasVlanError ? "text-red-300" : "text-amber-300"}`}>
+                            {isAr ? vlanIssues[0].messageAr : vlanIssues[0].messageEn}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex gap-2">
