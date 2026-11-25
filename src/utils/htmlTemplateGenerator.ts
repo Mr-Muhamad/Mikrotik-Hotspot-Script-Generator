@@ -150,10 +150,19 @@ interface PortalMeta {
 
 function getPortalMeta(config: HotspotConfig, lang: "ar" | "en"): PortalMeta {
   const isAr = lang === "ar";
+  const portalMode = config.portalLoginMode || "both";
   const defaultTitle = isAr ? "أهلاً بك في شبكة الواي فاي" : "Welcome to WiFi Hotspot";
   const defaultSubtitle = isAr
-    ? "سجل دخولك برقم الكارت أو بالحساب الشخصي للاتصال بالإنترنت"
-    : "Sign in with your voucher code or personal account to connect";
+    ? (portalMode === "voucher_only"
+        ? "أدخل رقم الكارت للاتصال بالإنترنت"
+        : portalMode === "user_pass_only"
+          ? "أدخل اسم المستخدم وكلمة المرور للاتصال بالإنترنت"
+          : "سجل دخولك برقم الكارت أو بالحساب الشخصي للاتصال بالإنترنت")
+    : (portalMode === "voucher_only"
+        ? "Enter your voucher code to connect to the internet"
+        : portalMode === "user_pass_only"
+          ? "Sign in with your username and password to connect"
+          : "Sign in with your voucher code or personal account to connect");
   const rawContact = config.contactPhone || "01000000000";
 
   return {
@@ -385,6 +394,9 @@ ${cardContent}
 export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" | "en" = "ar"): string {
   const meta = getPortalMeta(config, lang);
   const { isAr, title, subtitle, colors } = meta;
+  const portalLoginMode = config.portalLoginMode || "both";
+  const voucherPasswordMode = config.voucherPasswordMode || "same_as_user";
+  const initialMode = portalLoginMode === "user_pass_only" ? "user" : "voucher";
 
   const labels = isAr
     ? {
@@ -421,7 +433,7 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
             border-radius: 10px;
             font-size: 13px;
             margin-bottom: 20px;
-        }
+        }${portalLoginMode === "both" ? `
 
         .tabs {
             display: flex;
@@ -447,7 +459,7 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
         .tab-btn.active {
             background: ${colors.accentColor};
             color: #ffffff;
-        }
+        }` : ""}
 
         .input-group {
             margin-bottom: 16px;
@@ -481,57 +493,17 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
             box-shadow: 0 0 0 2px ${colors.accentColor}40;
         }`;
 
-  const cardContent = `        <h1>${title}</h1>
-        <p class="subtitle">${subtitle}</p>
-
-        $(if error)
-        <div class="error-msg">
-            $(error)
-        </div>
-        $(endif)
-
-        <div class="tabs" role="tablist">
+  const tabsHtml =
+    portalLoginMode === "both"
+      ? `\n        <div class="tabs" role="tablist">
             <button type="button" role="tab" aria-selected="true" class="tab-btn active" id="tabVoucher" onclick="switchTab('voucher')">${labels.tabVoucher}</button>
             <button type="button" role="tab" aria-selected="false" class="tab-btn" id="tabUser" onclick="switchTab('user')">${labels.tabUser}</button>
-        </div>
+        </div>\n`
+      : "";
 
-        <form name="sendin" action="$(link-login-only)" method="post">
-            <input type="hidden" name="username" />
-            <input type="hidden" name="password" />
-            <input type="hidden" name="dst" value="$(link-orig)" />
-            <input type="hidden" name="popup" value="true" />
-        </form>
-
-        <script type="text/javascript" src="/md5.js"></script>
-        <script type="text/javascript">
-        <!--
-            ${INLINE_MD5_RUNTIME}
-            function doLogin() {
-                var form = document.sendin;
-                var mode = document.getElementById('loginMode').value;
-                if (mode === 'voucher') {
-                    var vCode = document.getElementById('voucherCode').value.trim();
-                    if (!vCode) {
-                        return false;
-                    }
-                    form.username.value = vCode;
-                    form.password.value = vCode;
-                } else {
-                    var uName = document.getElementById('usernameInput').value.trim();
-                    if (!uName) {
-                        return false;
-                    }
-                    form.username.value = uName;
-                    form.password.value = document.getElementById('passwordInput').value;
-                }
-                $(if chap-id)
-                form.password.value = hexMD5('$(chap-id)' + form.password.value + '$(chap-challenge)');
-                $(endif)
-                form.submit();
-                return false;
-            }
-
-            function switchTab(mode) {
+  const switchTabScript =
+    portalLoginMode === "both"
+      ? `\n            function switchTab(mode) {
                 document.getElementById('loginMode').value = mode;
                 var voucherInput = document.getElementById('voucherCode');
                 var usernameInput = document.getElementById('usernameInput');
@@ -556,14 +528,26 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
                     voucherInput.required = false;
                     usernameInput.required = true;
                 }
-            }
-        //-->
-        </script>
+            }`
+      : "";
 
-        <input type="hidden" id="loginMode" value="voucher">
+  const voucherPasswordAssignment = voucherPasswordMode === "blank" ? "''" : "vCode";
 
-        <form onSubmit="return doLogin();">
-            <div id="voucherGroup" class="input-group">
+  const formFieldsHtml =
+    portalLoginMode === "voucher_only"
+      ? `            <div id="voucherGroup" class="input-group">
+                <label for="voucherCode">${labels.voucherLabel}</label>
+                <input type="text" id="voucherCode" class="input-field" placeholder="${labels.voucherPlaceholder}" required autocomplete="off">
+            </div>`
+      : portalLoginMode === "user_pass_only"
+        ? `            <div id="userPassGroup" class="input-group">
+                <label for="usernameInput">${labels.userLabel}</label>
+                <input type="text" id="usernameInput" class="input-field" placeholder="${labels.userPlaceholder}" style="margin-bottom: 12px;" required autocomplete="username">
+                
+                <label for="passwordInput">${labels.passLabel}</label>
+                <input type="password" id="passwordInput" class="input-field" placeholder="${labels.passPlaceholder}" autocomplete="current-password">
+            </div>`
+        : `            <div id="voucherGroup" class="input-group">
                 <label for="voucherCode">${labels.voucherLabel}</label>
                 <input type="text" id="voucherCode" class="input-field" placeholder="${labels.voucherPlaceholder}" required autocomplete="off">
             </div>
@@ -574,7 +558,59 @@ export function generateHotspotLoginPageHtml(config: HotspotConfig, lang: "ar" |
                 
                 <label for="passwordInput">${labels.passLabel}</label>
                 <input type="password" id="passwordInput" class="input-field" placeholder="${labels.passPlaceholder}" autocomplete="current-password">
-            </div>
+            </div>`;
+
+  const cardContent = `        <h1>${title}</h1>
+        <p class="subtitle">${subtitle}</p>
+
+        $(if error)
+        <div class="error-msg">
+            $(error)
+        </div>
+        $(endif)
+${tabsHtml}
+        <form name="sendin" action="$(link-login-only)" method="post">
+            <input type="hidden" name="username" />
+            <input type="hidden" name="password" />
+            <input type="hidden" name="dst" value="$(link-orig)" />
+            <input type="hidden" name="popup" value="true" />
+        </form>
+
+        <script type="text/javascript" src="/md5.js"></script>
+        <script type="text/javascript">
+        <!--
+            ${INLINE_MD5_RUNTIME}
+            function doLogin() {
+                var form = document.sendin;
+                var mode = document.getElementById('loginMode').value;
+                if (mode === 'voucher') {
+                    var vCode = document.getElementById('voucherCode').value.trim();
+                    if (!vCode) {
+                        return false;
+                    }
+                    form.username.value = vCode;
+                    form.password.value = ${voucherPasswordAssignment};
+                } else {
+                    var uName = document.getElementById('usernameInput').value.trim();
+                    if (!uName) {
+                        return false;
+                    }
+                    form.username.value = uName;
+                    form.password.value = document.getElementById('passwordInput').value;
+                }
+                $(if chap-id)
+                form.password.value = hexMD5('$(chap-id)' + form.password.value + '$(chap-challenge)');
+                $(endif)
+                form.submit();
+                return false;
+            }${switchTabScript}
+        //-->
+        </script>
+
+        <input type="hidden" id="loginMode" value="${initialMode}">
+
+        <form onSubmit="return doLogin();">
+${formFieldsHtml}
 
             <button type="submit" class="submit-btn">${labels.submitBtn}</button>
         </form>

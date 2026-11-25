@@ -141,14 +141,14 @@ export function generateFirewallAndSecuritySection(ctx: GeneratorContext): strin
   }
   script += `\n`;
 
-  if (config.disableUnusedServices) {
-    script += `# Disable insecure / unused management services\n`;
-    script += `/ip service\n`;
-    script += `set telnet disabled=yes\n`;
-    script += `set ftp disabled=yes\n`;
-    script += `set api disabled=yes\n`;
-    script += `set api-ssl disabled=yes\n\n`;
-  }
+  script += `# RouterOS Management & API Services (/ip service)\n`;
+  script += `/ip service\n`;
+  script += `set telnet disabled=${config.serviceTelnet ? "no" : "yes"}\n`;
+  script += `set ftp disabled=${config.serviceFtp ? "no" : "yes"}\n`;
+  script += `set www disabled=${config.serviceWww !== false ? "no" : "yes"}\n`;
+  script += `set ssh disabled=${config.serviceSsh !== false ? "no" : "yes"}\n`;
+  script += `set api disabled=${config.serviceApi ? "no" : "yes"}\n`;
+  script += `set api-ssl disabled=${config.serviceApiSsl ? "no" : "yes"}\n\n`;
 
   script += `/ip firewall mangle remove [ find where !dynamic and comment~"^Anti-Sharing: Force TTL=1" ]\n`;
   if (config.preventSharingTtl) {

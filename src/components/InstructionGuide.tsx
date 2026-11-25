@@ -46,6 +46,7 @@ export default function InstructionGuide({
   const isV7 = config.rosVersion === "v7";
   const effectiveAuthMode = config.authMode || (config.enableUserManager ? "userman_radius" : "hotspot_only");
   const useRadius = effectiveAuthMode !== "hotspot_only";
+  const isExternalRadius = useRadius && config.radiusBackend === "external_radius";
   const htmlFolder = config.storageMode === "flash" ? "flash/hotspot" : (config.htmlDirectory || "hotspot");
   const isMultiWan = config.loadBalancingMethod !== "none" && (config.wanLines?.length || 0) > 0;
   const hasVlans = Boolean(config.enableVlans && config.vlans && config.vlans.length > 0);
@@ -113,15 +114,21 @@ export default function InstructionGuide({
   const modeSummaryLabel =
     effectiveAuthMode === "hotspot_only"
       ? (isAr ? "هوتسبوت محلي فقط" : "Hotspot Local Only")
-      : effectiveAuthMode === "hybrid"
-        ? (isAr ? "وضع هجين (Hotspot + UM)" : "Hybrid (Hotspot + UM)")
-        : (isAr ? "يوزر مانجر RADIUS" : "User Manager (RADIUS)");
+      : isExternalRadius
+        ? (effectiveAuthMode === "hybrid"
+            ? (isAr ? "هجين (RADIUS خارجي + محلي)" : "Hybrid (External RADIUS)")
+            : (isAr ? "سيرفر RADIUS خارجي" : "External RADIUS"))
+        : effectiveAuthMode === "hybrid"
+          ? (isAr ? "وضع هجين (Hotspot + UM)" : "Hybrid (Hotspot + UM)")
+          : (isAr ? "يوزر مانجر RADIUS" : "User Manager (RADIUS)");
 
   const umManagementHint = !useRadius
     ? (isAr ? "Winbox -> IP -> Hotspot -> Users" : "Winbox -> IP -> Hotspot -> Users")
-    : isV7
-      ? `Winbox -> User Manager | http://${config.gatewayIp}/um`
-      : `http://${config.gatewayIp}/userman`;
+    : isExternalRadius
+      ? `${config.radiusServerIp}:${config.radiusPort || 1812}`
+      : isV7
+        ? `Winbox -> User Manager | http://${config.gatewayIp}/um`
+        : `http://${config.gatewayIp}/userman`;
 
   const preflightItems = isAr
     ? [
@@ -133,10 +140,10 @@ export default function InstructionGuide({
         },
         {
           id: "packages",
-          title: useRadius ? "التحقق من تثبيت حزمة user-manager المطابقة للإصدار" : "التحقق من تثبيت حزمة hotspot",
-          detail: useRadius
+          title: useRadius && !isExternalRadius ? "التحقق من تثبيت حزمة user-manager المطابقة للإصدار" : "التحقق من تثبيت حزمة hotspot",
+          detail: useRadius && !isExternalRadius
             ? `تأكد أن حزمة user-manager موجودة ومفعّلة وتطابق نفس رقم إصدار RouterOS (${config.rosVersion}) من extra-packages.`
-            : "حزمة hotspot تأتي مدمجة في النظام الأساسي لمعظم الأجهزة، تأكد أنها غير معطلة.",
+            : "حزمة hotspot تأتي مدمجة في النظام الأساسي لمعظم الأجهزة ولا يلزم تثبيت user-manager عند استخدام RADIUS خارجي أو الوضع المحلي.",
           cmd: "/system package print",
         },
         {
@@ -174,10 +181,10 @@ export default function InstructionGuide({
         },
         {
           id: "packages",
-          title: useRadius ? "Verify matching user-manager extra package is installed" : "Verify hotspot package is enabled",
-          detail: useRadius
+          title: useRadius && !isExternalRadius ? "Verify matching user-manager extra package is installed" : "Verify hotspot package is enabled",
+          detail: useRadius && !isExternalRadius
             ? `Confirm user-manager matches your exact RouterOS (${config.rosVersion}) version from MikroTik extra-packages.`
-            : "Confirm the built-in hotspot package is active.",
+            : "Confirm the built-in hotspot package is active (no user-manager package needed for external RADIUS or local mode).",
           cmd: "/system package print",
         },
         {
@@ -239,9 +246,11 @@ export default function InstructionGuide({
           desc:
             effectiveAuthMode === "hotspot_only"
               ? "أنت على وضع الهوتسبوت المحلي فقط: أضف الكروت أو راقبها من Winbox -> IP -> Hotspot -> Users (وإذا فعّلت on-login سيُنشأ Scheduler تلقائي لكل كارت عند أول دخول)."
-              : isV7
-                ? `أنت على RouterOS v7 RADIUS: افتح User Manager من Winbox/WebFig لمراجعة الباقات والقيود أو أنشئ الكروت ضمن المجموعة المحددة، وبوابة المشتركين على http://${config.gatewayIp}/um.`
-                : `أنت على RouterOS v6 RADIUS: افتح المتصفح على http://${config.gatewayIp}/userman وسجّل بحساب ${config.usermanAdminUser} لإدارة الكروت والطباعة والتقارير.`,
+              : isExternalRadius
+                ? `أنت على وضع RADIUS الخارجي: أدر الكروت من برنامجك أو سيرفر RADIUS على ${config.radiusServerIp}، وتأكد من تطابق Shared Secret ومنفذ CoA (${config.coaPort || 3799}).`
+                : isV7
+                  ? `أنت على RouterOS v7 RADIUS: افتح User Manager من Winbox/WebFig لمراجعة الباقات والقيود أو أنشئ الكروت ضمن المجموعة المحددة، وبوابة المشتركين على http://${config.gatewayIp}/um.`
+                  : `أنت على RouterOS v6 RADIUS: افتح المتصفح على http://${config.gatewayIp}/userman وسجّل بحساب ${config.usermanAdminUser} لإدارة الكروت والطباعة والتقارير.`,
         },
         {
           title: "إنهاء Safe Mode وحفظ نسخة التشغيل المستقر",
@@ -280,9 +289,11 @@ export default function InstructionGuide({
           desc:
             effectiveAuthMode === "hotspot_only"
               ? "In Hotspot Local Only mode, manage accounts under IP -> Hotspot -> Users (profiles with on-login automatically schedule per-user expiry on first login)."
-              : isV7
-                ? `Manage User Manager v7 inside Winbox/WebFig -> User Manager (client portal at http://${config.gatewayIp}/um). Ensure vouchers belong to a group with outer-auths enabled.`
-                : `Open http://${config.gatewayIp}/userman (login: ${config.usermanAdminUser}) to issue, print, and monitor User Manager v6 vouchers.`,
+              : isExternalRadius
+                ? `Manage subscribers on your standalone external RADIUS server (${config.radiusServerIp}); confirm matching Shared Secret and CoA port (${config.coaPort || 3799}).`
+                : isV7
+                  ? `Manage User Manager v7 inside Winbox/WebFig -> User Manager (client portal at http://${config.gatewayIp}/um). Ensure vouchers belong to a group with outer-auths enabled.`
+                  : `Open http://${config.gatewayIp}/userman (login: ${config.usermanAdminUser}) to issue, print, and monitor User Manager v6 vouchers.`,
         },
         {
           title: "Commit Safe Mode & Take Clean Snapshot",
@@ -291,7 +302,9 @@ export default function InstructionGuide({
         },
       ];
 
-  const umVerifyCmd = isV7
+  const umVerifyCmd = isExternalRadius
+    ? ["/radius print", "/radius incoming print"].join("\n")
+    : isV7
     ? [
         "/radius print",
         "/radius incoming print",

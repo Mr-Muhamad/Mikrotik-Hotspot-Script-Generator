@@ -36,6 +36,8 @@ export default function UserManagerTab({
   const isAr = lang === "ar";
   const isV7 = config.rosVersion === "v7";
   const authMode: AuthMode = config.authMode || (config.enableUserManager ? "userman_radius" : "hotspot_only");
+  const radiusBackend = config.radiusBackend === "external_radius" ? "external_radius" : "userman_local";
+  const isExternalRadius = radiusBackend === "external_radius";
 
   const [subTab, setSubTab] = useState<UmSubTab>("server");
   const [subDirty, setSubDirty] = useState(false);
@@ -44,8 +46,8 @@ export default function UserManagerTab({
   const umProfilesCount = (config.umProfiles || []).length;
 
   useEffect(() => {
-    onDirtyChange?.(authMode !== "hotspot_only" && subDirty);
-  }, [authMode, subDirty, onDirtyChange]);
+    onDirtyChange?.(authMode !== "hotspot_only" && !isExternalRadius && subDirty);
+  }, [authMode, isExternalRadius, subDirty, onDirtyChange]);
 
   useEffect(() => {
     return () => {
@@ -75,12 +77,12 @@ export default function UserManagerTab({
           <div>
             <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-emerald-400" aria-hidden="true" />
-              {isAr ? "اليوزر مانجر وراديوس (User Manager v6 & v7)" : "User Manager & RADIUS Studio"}
+              {isAr ? "خادم RADIUS واليوزر مانجر (User Manager & External RADIUS)" : "RADIUS Server & User Manager Studio"}
             </h2>
             <p className="text-slate-400 text-sm mt-1">
               {isAr
-                ? "إعداد منفصل ومطابق لوثائق MikroTik: قيود السرعة والكوتا (Limitations)، الباقات وجداول الأوقات (Profiles)، ومجموعات v7."
-                : "Separated User Manager configuration matching MikroTik docs: Limitations, time-scheduled Profiles, and v7 User Groups."}
+                ? "اختر بين اليوزر مانجر المدمج على نفس الراوتر (v6/v7) أو الربط مع سيرفر RADIUS خارجي مستقل."
+                : "Choose between MikroTik built-in User Manager (v6/v7) or connecting a standalone external RADIUS server."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -90,10 +92,10 @@ export default function UserManagerTab({
               onChange={(checked) =>
                 onChange({ authMode: checked ? "userman_radius" : "hotspot_only" })
               }
-              ariaLabel={isAr ? "تفعيل الربط مع اليوزر مانجر" : "Enable User Manager Integration"}
+              ariaLabel={isAr ? "تفعيل المصادقة عبر RADIUS" : "Enable RADIUS Authentication"}
             />
             <span className="text-sm font-medium text-slate-200">
-              {authMode !== "hotspot_only" ? (isAr ? "اليوزر مانجر مفعّل" : "Active") : (isAr ? "معطّل" : "Disabled")}
+              {authMode !== "hotspot_only" ? (isAr ? "RADIUS مفعّل" : "RADIUS Active") : (isAr ? "معطّل" : "Disabled")}
             </span>
           </div>
         </div>
@@ -133,92 +135,162 @@ export default function UserManagerTab({
         </div>
       ) : (
         <div className="space-y-5">
-          {/* Version notice */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 flex items-center gap-3 text-xs">
-            <Cpu className="w-4 h-4 text-emerald-400 flex-shrink-0" aria-hidden="true" />
-            <span className="text-slate-200 leading-relaxed">
-              {isV7 ? (
-                isAr ? (
-                  <>
-                    وضع RouterOS v7: يفعّل <bdi dir="ltr" className="font-mono text-emerald-300">/user-manager</bdi> مع مجموعات المصادقة <bdi dir="ltr" className="font-mono text-emerald-300">user group</bdi> وقيود <bdi dir="ltr" className="font-mono text-emerald-300">reset-counters-interval</bdi>، وتُدار البوابة على <bdi dir="ltr" className="font-mono text-emerald-300">/um</bdi>.
-                  </>
-                ) : (
-                  "RouterOS v7 mode: enables /user-manager with user-groups (outer-auths), counter auto-resets, and portal at /um."
-                )
-              ) : isAr ? (
-                <>
-                  وضع RouterOS v6: يولّد <bdi dir="ltr" className="font-mono text-emerald-300">/tool user-manager</bdi> مع حساب المالك <bdi dir="ltr" className="font-mono text-emerald-300">customer</bdi> وصلاحيات <bdi dir="ltr" className="font-mono text-emerald-300">starts-at=logon|now</bdi>، ولوحة الويب على <bdi dir="ltr" className="font-mono text-emerald-300">/userman</bdi>.
-                </>
-              ) : (
-                "RouterOS v6 mode: generates /tool user-manager with owner customer, starts-at=logon|now, and web portal at /userman."
-              )}
-            </span>
+          {/* RADIUS Backend Selector: Local User Manager vs External RADIUS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="group" aria-label={isAr ? "نوع خادم RADIUS" : "RADIUS Backend Mode"}>
+            <button
+              type="button"
+              onClick={() => {
+                onChange({
+                  radiusBackend: "userman_local",
+                  radiusServerIp: !config.radiusServerIp.trim() || config.radiusServerIp === "192.168.1.200"
+                    ? "127.0.0.1"
+                    : config.radiusServerIp,
+                });
+              }}
+              aria-pressed={!isExternalRadius}
+              className={`min-h-[44px] text-start p-3.5 rounded-xl border transition ${
+                !isExternalRadius
+                  ? "bg-emerald-950/60 border-emerald-500 text-slate-100"
+                  : "bg-slate-900/50 border-slate-800 text-slate-300 hover:border-slate-700"
+              }`}
+            >
+              <div className="text-xs font-bold text-emerald-300">
+                {isAr ? "اليوزر مانجر المدمج (User Manager)" : "Built-in User Manager (v6 / v7)"}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                {isAr
+                  ? "يولّد أوامر /radius مع /user-manager (أو /tool user-manager في v6) والباقات والقيود على نفس الراوتر."
+                  : "Generates /radius plus local /user-manager (v7) or /tool user-manager (v6) profiles & limitations."}
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubTab("server");
+                setSubDirty(false);
+                onChange({
+                  radiusBackend: "external_radius",
+                  radiusServerIp: config.radiusServerIp.trim() === "127.0.0.1" || !config.radiusServerIp.trim()
+                    ? "192.168.1.200"
+                    : config.radiusServerIp,
+                });
+              }}
+              aria-pressed={isExternalRadius}
+              className={`min-h-[44px] text-start p-3.5 rounded-xl border transition ${
+                isExternalRadius
+                  ? "bg-emerald-950/60 border-emerald-500 text-slate-100"
+                  : "bg-slate-900/50 border-slate-800 text-slate-300 hover:border-slate-700"
+              }`}
+            >
+              <div className="text-xs font-bold text-cyan-300">
+                {isAr ? "سيرفر RADIUS خارجي مستقل" : "Standalone External RADIUS Server"}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                {isAr
+                  ? "يضبط /radius وCoA وجدار الحماية فقط دون لمس حزمة user-manager (مناسب لـ FreeRADIUS وبرامج إدارة الكروت المستقلة)."
+                  : "Configures /radius client, CoA & firewall without emitting local User Manager commands (FreeRADIUS / external billing)."}
+              </p>
+            </button>
           </div>
 
-          {/* 3 Internal Sub-tabs */}
-          <div
-            role="tablist"
-            aria-label={isAr ? "أقسام اليوزر مانجر" : "User Manager sections"}
-            onKeyDown={(e) => handleTabListKeyDown(e, UM_SUB_TABS, subTab, setSubTab, isAr)}
-            className="grid grid-cols-3 gap-1.5 bg-slate-950/80 border border-slate-800 p-1.5 rounded-xl"
-          >
-            {UM_SUB_TABS.map((t) => {
-              const Icon = tabMeta[t].icon;
-              const isActive = subTab === t;
-              return (
-                <button
-                  key={t}
-                  id={`um-tab-${t}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`um-tabpanel-${t}`}
-                  tabIndex={isActive ? 0 : -1}
-                  onClick={() => setSubTab(t)}
-                  className={`min-h-[44px] sm:min-h-[38px] flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive
-                      ? "bg-emerald-950 border border-emerald-700 text-emerald-300"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800/70"
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
-                  <span>{tabMeta[t].label}</span>
-                </button>
-              );
-            })}
-          </div>
+          {!isExternalRadius ? (
+            <>
+              {/* Version notice */}
+              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 flex items-center gap-3 text-xs">
+                <Cpu className="w-4 h-4 text-emerald-400 flex-shrink-0" aria-hidden="true" />
+                <span className="text-slate-200 leading-relaxed">
+                  {isV7 ? (
+                    isAr ? (
+                      <>
+                        وضع RouterOS v7: يفعّل <bdi dir="ltr" className="font-mono text-emerald-300">/user-manager</bdi> مع مجموعات المصادقة <bdi dir="ltr" className="font-mono text-emerald-300">user group</bdi> وقيود <bdi dir="ltr" className="font-mono text-emerald-300">reset-counters-interval</bdi>، وتُدار البوابة على <bdi dir="ltr" className="font-mono text-emerald-300">/um</bdi>.
+                      </>
+                    ) : (
+                      "RouterOS v7 mode: enables /user-manager with user-groups (outer-auths), counter auto-resets, and portal at /um."
+                    )
+                  ) : isAr ? (
+                    <>
+                      وضع RouterOS v6: يولّد <bdi dir="ltr" className="font-mono text-emerald-300">/tool user-manager</bdi> مع حساب المالك <bdi dir="ltr" className="font-mono text-emerald-300">customer</bdi> وصلاحيات <bdi dir="ltr" className="font-mono text-emerald-300">starts-at=logon|now</bdi>، ولوحة الويب على <bdi dir="ltr" className="font-mono text-emerald-300">/userman</bdi>.
+                    </>
+                  ) : (
+                    "RouterOS v6 mode: generates /tool user-manager with owner customer, starts-at=logon|now, and web portal at /userman."
+                  )}
+                </span>
+              </div>
 
-          <div
-            id={`um-tabpanel-${subTab}`}
-            role="tabpanel"
-            aria-labelledby={`um-tab-${subTab}`}
-          >
-            {subTab === "server" && (
-              <UmServerSubTab
-                config={config}
-                onChange={onChange}
-                lang={lang}
-                onDirtyChange={setSubDirty}
-              />
-            )}
-            {subTab === "limitations" && (
-              <UmLimitationsSubTab
-                config={config}
-                hotspotProfiles={hotspotProfiles}
-                onChange={onChange}
-                lang={lang}
-                onDirtyChange={setSubDirty}
-              />
-            )}
-            {subTab === "profiles" && (
-              <UmProfilesSubTab
-                config={config}
-                onChange={onChange}
-                lang={lang}
-                onDirtyChange={setSubDirty}
-              />
-            )}
-          </div>
+              {/* 3 Internal Sub-tabs */}
+              <div
+                role="tablist"
+                aria-label={isAr ? "أقسام اليوزر مانجر" : "User Manager sections"}
+                onKeyDown={(e) => handleTabListKeyDown(e, UM_SUB_TABS, subTab, setSubTab, isAr)}
+                className="grid grid-cols-3 gap-1.5 bg-slate-950/80 border border-slate-800 p-1.5 rounded-xl"
+              >
+                {UM_SUB_TABS.map((t) => {
+                  const Icon = tabMeta[t].icon;
+                  const isActive = subTab === t;
+                  return (
+                    <button
+                      key={t}
+                      id={`um-tab-${t}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={`um-tabpanel-${t}`}
+                      tabIndex={isActive ? 0 : -1}
+                      onClick={() => setSubTab(t)}
+                      className={`min-h-[44px] sm:min-h-[38px] flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                        isActive
+                          ? "bg-emerald-950 border border-emerald-700 text-emerald-300"
+                          : "text-slate-300 hover:text-white hover:bg-slate-800/70"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                      <span>{tabMeta[t].label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div
+                id={`um-tabpanel-${subTab}`}
+                role="tabpanel"
+                aria-labelledby={`um-tab-${subTab}`}
+              >
+                {subTab === "server" && (
+                  <UmServerSubTab
+                    config={config}
+                    onChange={onChange}
+                    lang={lang}
+                    onDirtyChange={setSubDirty}
+                  />
+                )}
+                {subTab === "limitations" && (
+                  <UmLimitationsSubTab
+                    config={config}
+                    hotspotProfiles={hotspotProfiles}
+                    onChange={onChange}
+                    lang={lang}
+                    onDirtyChange={setSubDirty}
+                  />
+                )}
+                {subTab === "profiles" && (
+                  <UmProfilesSubTab
+                    config={config}
+                    onChange={onChange}
+                    lang={lang}
+                    onDirtyChange={setSubDirty}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <UmServerSubTab
+              config={config}
+              onChange={onChange}
+              lang={lang}
+              onDirtyChange={setSubDirty}
+            />
+          )}
         </div>
       )}
     </div>

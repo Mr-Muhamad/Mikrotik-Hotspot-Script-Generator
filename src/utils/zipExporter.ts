@@ -169,34 +169,39 @@ export function buildDeploymentReadme(
   const htmlFolder = config.storageMode === "flash" ? "flash/hotspot" : (config.htmlDirectory || "hotspot");
   const authMode = config.authMode || (config.enableUserManager ? "userman_radius" : "hotspot_only");
   const useRadius = authMode !== "hotspot_only";
+  const isExternalRadius = useRadius && config.radiusBackend === "external_radius";
   const portalUrl = `http://${config.dnsName || "hotspot.local"}/login.html`;
 
   const verifyUmCmds = useRadius
-    ? isV7
-      ? [
-          "   /radius print",
-          "   /radius incoming print",
-          "   /user-manager print",
-          "   /user-manager router print",
-          "   /user-manager user group print",
-          "   /user-manager limitation print",
-        ]
-      : [
-          "   /radius print",
-          "   /radius incoming print",
-          "   /tool user-manager customer print",
-          "   /tool user-manager router print",
-          "   /tool user-manager profile limitation print",
-        ]
+    ? isExternalRadius
+      ? ["   /radius print", "   /radius incoming print"]
+      : isV7
+        ? [
+            "   /radius print",
+            "   /radius incoming print",
+            "   /user-manager print",
+            "   /user-manager router print",
+            "   /user-manager user group print",
+            "   /user-manager limitation print",
+          ]
+        : [
+            "   /radius print",
+            "   /radius incoming print",
+            "   /tool user-manager customer print",
+            "   /tool user-manager router print",
+            "   /tool user-manager profile limitation print",
+          ]
     : ["   /ip hotspot user profile print", "   /ip hotspot user print"];
 
   if (lang === "ar") {
     const umNoteAr =
       authMode === "hotspot_only"
         ? "نمط المشتركين    : هوتسبوت محلي فقط (/ip hotspot user)"
-        : isV7
-          ? `نمط المشتركين    : ${authMode} (User Manager v7 في Winbox/WebFig؛ البوابة: http://${config.gatewayIp}/um)`
-          : `نمط المشتركين    : ${authMode} (بوابة User Manager v6: http://${config.gatewayIp}/userman)`;
+        : isExternalRadius
+          ? `نمط المشتركين    : ${authMode} (خادم RADIUS خارجي مستقل: ${config.radiusServerIp}:${config.radiusPort || 1812})`
+          : isV7
+            ? `نمط المشتركين    : ${authMode} (User Manager v7 في Winbox/WebFig؛ البوابة: http://${config.gatewayIp}/um)`
+            : `نمط المشتركين    : ${authMode} (بوابة User Manager v6: http://${config.gatewayIp}/userman)`;
 
     const wanNoteAr =
       config.loadBalancingMethod !== "none" && (config.wanLines?.length || 0) > 0
@@ -212,7 +217,7 @@ export function buildDeploymentReadme(
       `إعدادات الإنترنت  : ${wanNoteAr}`,
       `مجلد صفحة الدخول  : ${htmlFolder}`,
       umNoteAr,
-      `الحزم المطلوبة    : system, hotspot${useRadius ? ", user-manager (extra package)" : ""}`,
+      `الحزم المطلوبة    : system, hotspot${useRadius && !isExternalRadius ? ", user-manager (extra package)" : ""}`,
       "",
       "1) إجراءات السلامة والنسخ الاحتياطي قبل التنفيذ (في Winbox New Terminal):",
       "   - اتصل عبر عنوان MAC في Winbox واضغط Ctrl+X لتفعيل الوضع الآمن (Safe Mode).",
@@ -255,9 +260,11 @@ export function buildDeploymentReadme(
   const umNote =
     authMode === "hotspot_only"
       ? "Subscriber Mode  : Hotspot Local Only (/ip hotspot user)"
-      : isV7
-        ? `Subscriber Mode  : ${authMode} (User Manager v7 in Winbox/WebFig; portal at http://${config.gatewayIp}/um)`
-        : `Subscriber Mode  : ${authMode} (User Manager v6 portal at http://${config.gatewayIp}/userman)`;
+      : isExternalRadius
+        ? `Subscriber Mode  : ${authMode} (Standalone External RADIUS Server at ${config.radiusServerIp}:${config.radiusPort || 1812})`
+        : isV7
+          ? `Subscriber Mode  : ${authMode} (User Manager v7 in Winbox/WebFig; portal at http://${config.gatewayIp}/um)`
+          : `Subscriber Mode  : ${authMode} (User Manager v6 portal at http://${config.gatewayIp}/userman)`;
 
   const wanNote =
     config.loadBalancingMethod !== "none" && (config.wanLines?.length || 0) > 0
@@ -273,7 +280,7 @@ export function buildDeploymentReadme(
     `WAN Configuration: ${wanNote}`,
     `HTML Directory   : ${htmlFolder}`,
     umNote,
-    `Required Packages: system, hotspot${useRadius ? ", user-manager (extra package)" : ""}`,
+    `Required Packages: system, hotspot${useRadius && !isExternalRadius ? ", user-manager (extra package)" : ""}`,
     "",
     "1) Pre-flight Safety & Backup (Recommended in Winbox New Terminal):",
     "   - Connect via Winbox MAC Address and press Ctrl+X to enable Safe Mode.",

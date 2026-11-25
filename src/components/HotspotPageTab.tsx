@@ -11,7 +11,7 @@ import {
   type PortalPageName,
 } from "../utils/htmlTemplateGenerator";
 import { copyTextToClipboard } from "../utils/clipboard";
-import { Layout, Download, Copy, Check, Phone, Type, Palette, Eye, FolderCheck } from "lucide-react";
+import { Layout, Download, Copy, Check, Phone, Type, Palette, Eye, FolderCheck, KeyRound } from "lucide-react";
 
 interface Props {
   config: HotspotConfig;
@@ -228,6 +228,56 @@ export default function HotspotPageTab({ config, onChange, lang }: Props) {
             <option value="blue">{isAr ? "أزرق ملكي (Royal Blue)" : "Royal Blue"}</option>
             <option value="purple">{isAr ? "بنفسجي بريميوم (Deep Purple)" : "Deep Purple"}</option>
             <option value="dark">{isAr ? "أسود نايت مود (Dark Slate)" : "Dark Slate"}</option>
+          </select>
+        </div>
+
+        {/* Portal Credential Mode */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="portal-login-mode" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
+            <KeyRound className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            {isAr ? "نمط حقول الدخول في صفحة login.html" : "Portal Credential Fields Mode"}
+          </label>
+          <select
+            id="portal-login-mode"
+            name="portalLoginMode"
+            className="min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400"
+            value={config.portalLoginMode || "both"}
+            onChange={(e) => onChange({ portalLoginMode: e.target.value as HotspotConfig["portalLoginMode"] })}
+          >
+            <option value="both">
+              {isAr
+                ? "الاثنين معاً (تبويب كارت + تبويب اسم وباسورد مختلفين)"
+                : "Both Tabs (Voucher Code + Separate Username & Password)"}
+            </option>
+            <option value="voucher_only">
+              {isAr ? "خانة كارت واحدة فقط (Voucher Only)" : "Single Voucher Code Field Only"}
+            </option>
+            <option value="user_pass_only">
+              {isAr ? "كود وباسورد مختلفين فقط (Username & Password)" : "Separate Username & Password Fields Only"}
+            </option>
+          </select>
+        </div>
+
+        {/* Single-Field Voucher Password Mode */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="portal-voucher-pass-mode" className="text-slate-200 text-xs font-medium flex items-center gap-1.5">
+            <KeyRound className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+            {isAr ? "كلمة مرور خانة الكارت الواحد" : "Single-Field Voucher Password Mode"}
+          </label>
+          <select
+            id="portal-voucher-pass-mode"
+            name="voucherPasswordMode"
+            disabled={config.portalLoginMode === "user_pass_only"}
+            className="min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 disabled:opacity-50"
+            value={config.voucherPasswordMode || "same_as_user"}
+            onChange={(e) => onChange({ voucherPasswordMode: e.target.value as HotspotConfig["voucherPasswordMode"] })}
+          >
+            <option value="same_as_user">
+              {isAr ? "الكود = الباسورد (يرسل الكود في الحقلين)" : "Code = Password (same value)"}
+            </option>
+            <option value="blank">
+              {isAr ? "كود بدون باسورد (يرسل كلمة مرور فارغة)" : "Code Without Password (blank password)"}
+            </option>
           </select>
         </div>
       </div>

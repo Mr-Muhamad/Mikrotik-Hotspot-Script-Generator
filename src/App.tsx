@@ -273,19 +273,24 @@ export default function App() {
     { id: 1, label: isAr ? "الشبكات الافتراضية (VLANs)" : "VLANs Setup", shortLabel: "VLANs", icon: Layers },
     { id: 2, label: isAr ? "دمج الخطوط (Multi-WAN)" : "Load Balancing", shortLabel: isAr ? "دمج الخطوط" : "Multi-WAN", icon: Zap },
     { id: 3, label: isAr ? "بروفايلات الهوتسبوت" : "Hotspot Profiles", shortLabel: isAr ? "الهوتسبوت" : "Hotspot", icon: Gauge },
-    { id: 4, label: isAr ? "اليوزر مانجر وراديوس" : "User Manager & RADIUS", shortLabel: isAr ? "اليوزر مانجر" : "User Manager", icon: ShieldCheck },
+    { id: 4, label: isAr ? "راديوس واليوزر مانجر" : "RADIUS & User Manager", shortLabel: isAr ? "راديوس / UM" : "RADIUS / UM", icon: ShieldCheck },
     { id: 5, label: isAr ? "حماية وتخصيص" : "Security & Advanced", shortLabel: isAr ? "الأمان والميزات" : "Security", icon: Lock },
     { id: 6, label: isAr ? "صفحة الدخول (login.html)" : "Login Page Template", shortLabel: isAr ? "صفحة الدخول" : "Login Page", icon: Layout },
     { id: 7, label: isAr ? "دليل التركيب" : "How to Apply", shortLabel: isAr ? "دليل التركيب" : "Guide", icon: BookOpen },
   ];
 
   const effectiveAuthMode = config.authMode || (config.enableUserManager ? "userman_radius" : "hotspot_only");
+  const isExternalRadius = effectiveAuthMode !== "hotspot_only" && config.radiusBackend === "external_radius";
   const authModeLabel =
     effectiveAuthMode === "hotspot_only"
       ? (isAr ? "هوتسبوت محلي فقط" : "Hotspot Only")
-      : effectiveAuthMode === "hybrid"
-        ? (isAr ? "وضع هجين (Hotspot + UM)" : "Hybrid Mode")
-        : (isAr ? "يوزر مانجر RADIUS" : "User Manager RADIUS");
+      : isExternalRadius
+        ? (effectiveAuthMode === "hybrid"
+            ? (isAr ? "هجين (RADIUS خارجي)" : "Hybrid (External RADIUS)")
+            : (isAr ? "RADIUS خارجي مستقل" : "External RADIUS"))
+        : effectiveAuthMode === "hybrid"
+          ? (isAr ? "وضع هجين (Hotspot + UM)" : "Hybrid Mode")
+          : (isAr ? "يوزر مانجر RADIUS" : "User Manager RADIUS");
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans" dir={isAr ? "rtl" : "ltr"}>
@@ -498,11 +503,13 @@ export default function App() {
               <Gauge className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
               <span className="text-slate-400">{isAr ? "الباقات:" : "Plans:"}</span>
               <span dir="ltr" className="font-mono font-semibold text-slate-200 inline-block">
-                {effectiveAuthMode === "userman_radius"
-                  ? `${config.umProfiles?.length || 0} UM`
-                  : effectiveAuthMode === "hotspot_only"
-                    ? `${hotspotProfiles.length} HS`
-                    : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
+                {effectiveAuthMode === "hotspot_only"
+                  ? `${hotspotProfiles.length} HS`
+                  : isExternalRadius
+                    ? (effectiveAuthMode === "hybrid" ? `${hotspotProfiles.length} HS / Ext RADIUS` : "External RADIUS")
+                    : effectiveAuthMode === "userman_radius"
+                      ? `${config.umProfiles?.length || 0} UM`
+                      : `${hotspotProfiles.length} HS / ${config.umProfiles?.length || 0} UM`}
               </span>
             </div>
           </div>

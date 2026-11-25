@@ -895,7 +895,7 @@ test("Idempotent re-import guards, non-destructive UM v6/v7 upserts, and Multi-W
   assert.match(v7, /\/ip firewall nat remove \[ find where !dynamic and /);
   assert.match(v7, /\/ip firewall mangle remove \[ find where !dynamic and /);
   assert.match(v7, /\/ip firewall filter remove \[ find where !dynamic and /);
-  assert.match(v7, /\/radius remove \[ find comment="Radius link for User Manager" \]/);
+  assert.match(v7, /\/radius remove \[ find where comment="Radius link for User Manager" or comment="External RADIUS Server for Hotspot" \]/);
   assert.match(v7, /\/system scheduler remove \[ find name=schedule_weekly_reboot \]/);
 
   // RouterOS v6 must omit owner= and customer= in set[...] while keeping them in add[...]
@@ -1021,6 +1021,14 @@ test("End-to-End RouterOS .rsc structural & syntax verification across 24 featur
             { id: "wg2", domain: "104.16.0.0/12", entryType: "ip", includeHttpsIp: false },
           ],
           ipBindings: [{ id: "ib1", macAddress: "AA:BB:CC:DD:EE:01", ipAddress: "192.168.80.5", type: "bypassed" }],
+          radiusBackend: rosVersion === "v7" && i % 2 === 0 && authMode !== "hotspot_only" ? "external_radius" : "userman_local",
+          radiusServerIp: rosVersion === "v7" && i % 2 === 0 && authMode !== "hotspot_only" ? "10.0.0.5" : "127.0.0.1",
+          radiusAcctPort: 1813,
+          radiusSrcAddress: rosVersion === "v7" && i % 2 === 0 && authMode !== "hotspot_only" ? "10.0.0.1" : "",
+          serviceApi: i % 2 === 0,
+          serviceFtp: i % 3 === 0,
+          portalLoginMode: i % 3 === 0 ? "voucher_only" : i % 3 === 1 ? "user_pass_only" : "both",
+          voucherPasswordMode: i % 2 === 0 ? "blank" : "same_as_user",
         });
 
         const script = generateMikrotikScript(cfg, baseRichProfiles);
@@ -1030,4 +1038,94 @@ test("End-to-End RouterOS .rsc structural & syntax verification across 24 featur
     }
   }
   assert.equal(count, 36);
+});
+
+test("Granular /ip service controls, 3 portal login credential modes, and legacy hydration work accurately", () => {
+  const script = generateMikrotikScript(
+    makeBaseConfig({
+      serviceTelnet: false,
+      serviceFtp: true,
+      serviceWww: true,
+      serviceSsh: true,
+      serviceApi: true,
+      serviceApiSsl: true,
+    }),
+    sampleHotspotProfiles
+  );
+
+  assert.match(script, /\/ip service\nset telnet disabled=yes\nset ftp disabled=no\nset www disabled=no\nset ssh disabled=no\nset api disabled=no\nset api-ssl disabled=no/);
+
+  const migrated = hydrateConfig({ disableUnusedServices: false });
+  assert.equal(migrated.serviceTelnet, true);
+  assert.equal(migrated.serviceFtp, true);
+  assert.equal(migrated.serviceApi, true);
+  assert.equal(migrated.serviceApiSsl, true);
+  assert.equal("disableUnusedServices" in (migrated as unknown as Record<string, unknown>), false);
+
+  const blankVoucherHtml = generateHotspotLoginPageHtml(
+    makeBaseConfig({ portalLoginMode: "voucher_only", voucherPasswordMode: "blank" }),
+    "en"
+  );
+  assert.match(blankVoucherHtml, /id="loginMode" value="voucher"/);
+  assert.match(blankVoucherHtml, /form\.password\.value = '';/);
+  assert.doesNotMatch(blankVoucherHtml, /id="userPassGroup"/);
+  assert.doesNotMatch(blankVoucherHtml, /id="tabUser"/);
+
+  const userPassOnlyHtml = generateHotspotLoginPageHtml(
+    makeBaseConfig({ portalLoginMode: "user_pass_only" }),
+    "ar"
+  );
+  assert.match(userPassOnlyHtml, /id="loginMode" value="user"/);
+  assert.match(userPassOnlyHtml, /id="userPassGroup"/);
+  assert.doesNotMatch(userPassOnlyHtml, /id="voucherGroup"/);
+  assert.doesNotMatch(userPassOnlyHtml, /id="tabVoucher"/);
+
+  const bothHtml = generateHotspotLoginPageHtml(
+    makeBaseConfig({ portalLoginMode: "both", voucherPasswordMode: "same_as_user" }),
+    "en"
+  );
+  assert.match(bothHtml, /id="tabVoucher"/);
+  assert.match(bothHtml, /id="tabUser"/);
+  assert.match(bothHtml, /form\.password\.value = vCode;/);
+});
+
+test("Standalone External RADIUS backend omits local User Manager, sets src-address & CoA, and validates properly", () => {
+  const extCfg = makeBaseConfig({
+    rosVersion: "v7",
+    authMode: "userman_radius",
+    radiusBackend: "external_radius",
+    radiusServerIp: "10.50.0.10",
+    radiusPort: 1812,
+    radiusAcctPort: 1813,
+    radiusSrcAddress: "10.50.0.2",
+    radiusSecret: "extSecret!1",
+    coaPort: 3799,
+  });
+
+  const extScript = generateMikrotikScript(extCfg, sampleHotspotProfiles);
+  assert.match(extScript, /add service=hotspot address=10\.50\.0\.10 secret="extSecret!1" authentication-port=1812 accounting-port=1813 timeout=3000ms src-address=10\.50\.0\.2 comment="External RADIUS Server for Hotspot"/);
+  assert.match(extScript, /\/radius incoming\nset accept=yes port=3799/);
+  assert.match(extScript, /protocol=udp src-address=10\.50\.0\.10 dst-port=3799 comment="Allow Incoming RADIUS CoA" place-before=\$inDrop/);
+  assert.doesNotMatch(extScript, /\/user-manager/);
+  assert.doesNotMatch(extScript, /\/tool user-manager/);
+
+  assert.equal(validateConfiguration(extCfg, sampleHotspotProfiles).length, 0);
+
+  const badExtIssues = validateConfiguration(
+    { ...extCfg, radiusServerIp: "127.0.0.1", radiusSrcAddress: "bad-ip" },
+    sampleHotspotProfiles
+  );
+  const badIds = new Set(badExtIssues.map((i) => i.id));
+  assert.ok(badIds.has("ext_radius_loopback_ip"));
+  assert.ok(badIds.has("um_radius_src_ip_invalid"));
+
+  const wwwDisabledIssues = validateConfiguration(
+    makeBaseConfig({ authMode: "userman_radius", radiusBackend: "userman_local", serviceWww: false }),
+    sampleHotspotProfiles
+  );
+  assert.ok(wwwDisabledIssues.some((i) => i.id === "um_www_service_disabled"));
+
+  const extReadme = buildDeploymentReadme(extCfg, "hotspot.rsc", "en");
+  assert.doesNotMatch(extReadme, /user-manager \(extra package\)/);
+  assert.match(extReadme, /Standalone External RADIUS Server at 10\.50\.0\.10:1812/);
 });

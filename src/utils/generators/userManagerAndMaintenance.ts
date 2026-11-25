@@ -10,6 +10,8 @@ import {
   escapeRosString,
   mbToBytes,
   normalizeRosRate,
+  parseIpv4ToInt,
+  sanitizeIpv4,
   sanitizeRosIdentifier,
 } from "./helpers.ts";
 
@@ -23,6 +25,7 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
     config,
     isV7,
     useRadius,
+    isExternalRadius,
     radServerIpSafe,
     coaPortSafe,
   } = ctx;
@@ -32,7 +35,7 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
   // 9. RADIUS & User Manager Setup
   if (useRadius) {
     const authPort = clampInt(config.radiusPort || 1812, 1, 65535, 1812);
-    const acctPort = Math.min(65535, authPort + 1);
+    const acctPort = clampInt(config.radiusAcctPort || (authPort + 1), 1, 65535, Math.min(65535, authPort + 1));
     const coaPort = coaPortSafe;
     const radTimeout = sanitizeRosIdentifier(config.radiusTimeout || "3000ms", "3000ms");
     const radServerIp = radServerIpSafe;
@@ -40,7 +43,13 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
     const safeUmRouter = escapeRosString(config.usermanRouterName);
     const safeUmAdminUser = escapeRosString(config.usermanAdminUser);
     const safeUmAdminPass = escapeRosString(config.usermanAdminPass);
-    const srcAddressParam = radServerIp === "127.0.0.1" ? " src-address=127.0.0.1" : "";
+    const trimmedSrcIp = (config.radiusSrcAddress || "").trim();
+    const srcAddressParam = radServerIp === "127.0.0.1"
+      ? " src-address=127.0.0.1"
+      : (trimmedSrcIp && parseIpv4ToInt(trimmedSrcIp) !== null
+          ? ` src-address=${sanitizeIpv4(trimmedSrcIp, "")}`
+          : "");
+    const radiusComment = isExternalRadius ? "External RADIUS Server for Hotspot" : "Radius link for User Manager";
 
     const umLims = config.umLimitations || [];
     const limById = new Map<string, UserManagerLimitation>(umLims.map((l) => [l.id, l]));
@@ -48,17 +57,19 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
     const umGroups = config.umGroups || [];
 
     script += `# ---------------------------------------------------------------------\n`;
-    script += `# 9. RADIUS Client & User Manager Setup (${isV7 ? "RouterOS v7 Syntax" : "RouterOS v6 Syntax"})\n`;
+    script += `# 9. RADIUS Client & User Manager Setup (${isExternalRadius ? "Standalone External RADIUS" : isV7 ? "RouterOS v7 Syntax" : "RouterOS v6 Syntax"})\n`;
     script += `# ---------------------------------------------------------------------\n`;
     script += `# MikroTik RADIUS Client Configuration\n`;
-    script += `/radius remove [ find comment="Radius link for User Manager" ]\n`;
+    script += `/radius remove [ find where comment="Radius link for User Manager" or comment="External RADIUS Server for Hotspot" ]\n`;
     script += `/radius\n`;
-    script += `add service=hotspot address=${radServerIp} secret="${safeRadSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=${radTimeout}${srcAddressParam} comment="Radius link for User Manager"\n\n`;
+    script += `add service=hotspot address=${radServerIp} secret="${safeRadSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=${radTimeout}${srcAddressParam} comment="${radiusComment}"\n\n`;
 
     script += `/radius incoming\n`;
     script += `set accept=yes port=${coaPort}\n\n`;
 
-    if (isV7) {
+    if (isExternalRadius) {
+      script += `# Standalone External RADIUS mode: local MikroTik User Manager commands omitted\n\n`;
+    } else if (isV7) {
       // RouterOS v7 User Manager Syntax (/user-manager ...)
       script += `# RouterOS v7 User Manager Configuration\n`;
       script += `/user-manager\n`;

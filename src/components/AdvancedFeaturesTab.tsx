@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import type { HotspotConfig, IpBindingEntry, WalledGardenEntry } from "../types";
-import { Lock, Cookie, AlertTriangle, Play, Globe, Clock, Plus, Trash2, Shield, Gauge, Network } from "lucide-react";
+import { Lock, Cookie, AlertTriangle, Play, Globe, Clock, Plus, Trash2, Shield, Gauge, Network, ServerCog } from "lucide-react";
 import ToggleSwitch from "./ToggleSwitch";
 
 interface Props {
@@ -191,8 +191,8 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
                 {isAr
-                  ? "إضافة قواعد لحظر ثغرات DNS المفتوحة، تأمين منافذ الإدارة من الإنترنت والعملاء، تعطيل الخدمات غير الآمنة، ومنع مشاركة الكروت."
-                  : "Protect management ports from WAN/clients, drop open DNS resolvers, disable legacy services, and prevent connection sharing."}
+                  ? "إضافة قواعد لحظر ثغرات DNS المفتوحة، تأمين منافذ الإدارة من الإنترنت والعملاء، ومنع مشاركة الكروت."
+                  : "Protect management ports from WAN/clients, drop open DNS resolvers, and prevent connection sharing."}
               </p>
             </div>
             <ToggleSwitch
@@ -204,7 +204,7 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800/60 text-xs text-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-800/60 text-xs text-slate-200">
             <label htmlFor="adv-fw-wan" className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
               <input
                 id="adv-fw-wan"
@@ -229,18 +229,6 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
               <span>{isAr ? "منع عملاء الهوتسبوت من منافذ الإدارة" : "Block Hotspot Clients from Router Ports"}</span>
             </label>
 
-            <label htmlFor="adv-fw-services" className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
-              <input
-                id="adv-fw-services"
-                name="disableUnusedServices"
-                type="checkbox"
-                className="w-4 h-4 flex-shrink-0 accent-emerald-500"
-                checked={config.disableUnusedServices}
-                onChange={(e) => onChange({ disableUnusedServices: e.target.checked })}
-              />
-              <span>{isAr ? "تعطيل خدمات Telnet / FTP / API" : "Disable Telnet / FTP / API Services"}</span>
-            </label>
-
             <label htmlFor="adv-fw-ttl" className="min-h-[44px] sm:min-h-[32px] flex items-center gap-2 cursor-pointer">
               <input
                 id="adv-fw-ttl"
@@ -253,6 +241,110 @@ export default function AdvancedFeaturesTab({ config, onChange, lang }: Props) {
               <span>{isAr ? "منع مشاركة الإنترنت عبر الراوترات (TTL=1)" : "Anti-Sharing: Force TTL=1"}</span>
             </label>
           </div>
+        </div>
+
+        {/* Granular RouterOS Services (/ip service) */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
+              <ServerCog className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              {isAr ? "التحكم في خدمات الراوتر (/ip service)" : "RouterOS Services Control (/ip service)"}
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {isAr
+                ? "فعّل أو عطّل كل خدمة بشكل مستقل (مثل فتح API لبرامج إدارة الكروت أو WebFig/User Manager، مع إغلاق Telnet/FTP)."
+                : "Enable or disable each management service independently (e.g., keep API open for external billing tools while disabling Telnet/FTP)."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800/60 text-xs">
+            {[
+              {
+                key: "serviceApi" as const,
+                id: "adv-svc-api",
+                label: "API (8728)",
+                descAr: "لبرامج الكروت والمحاسبة (مثل Mikhmon)",
+                descEn: "External billing / card apps",
+                checked: config.serviceApi,
+              },
+              {
+                key: "serviceApiSsl" as const,
+                id: "adv-svc-apissl",
+                label: "API-SSL (8729)",
+                descAr: "اتصال API مشفر عبر TLS",
+                descEn: "Encrypted TLS API",
+                checked: config.serviceApiSsl,
+              },
+              {
+                key: "serviceWww" as const,
+                id: "adv-svc-www",
+                label: "WWW / WebFig (80)",
+                descAr: "مطلوب لواجهة الويب و/um و/userman",
+                descEn: "Required for WebFig & /um",
+                checked: config.serviceWww !== false,
+              },
+              {
+                key: "serviceSsh" as const,
+                id: "adv-svc-ssh",
+                label: "SSH (22)",
+                descAr: "إدارة الطرفية الآمنة CLI",
+                descEn: "Secure terminal access",
+                checked: config.serviceSsh !== false,
+              },
+              {
+                key: "serviceFtp" as const,
+                id: "adv-svc-ftp",
+                label: "FTP (21)",
+                descAr: "نقل الملفات وصفحات الدخول",
+                descEn: "File transfer for HTML files",
+                checked: config.serviceFtp,
+              },
+              {
+                key: "serviceTelnet" as const,
+                id: "adv-svc-telnet",
+                label: "Telnet (23)",
+                descAr: "بروتوكول قديم غير مشفر",
+                descEn: "Legacy unencrypted CLI",
+                checked: config.serviceTelnet,
+              },
+            ].map((svc) => (
+              <div
+                key={svc.key}
+                className={`flex items-center justify-between gap-2 p-2.5 rounded-lg border transition ${
+                  svc.checked
+                    ? "bg-emerald-950/30 border-emerald-700/60"
+                    : "bg-slate-950/50 border-slate-800"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="font-mono font-semibold text-slate-100 truncate" dir="ltr">
+                    {svc.label}
+                  </div>
+                  <div className="text-[11px] text-slate-400 truncate">
+                    {isAr ? svc.descAr : svc.descEn}
+                  </div>
+                </div>
+                <ToggleSwitch
+                  id={svc.id}
+                  size="sm"
+                  checked={svc.checked}
+                  onChange={(val) => onChange({ [svc.key]: val })}
+                  ariaLabel={svc.label}
+                />
+              </div>
+            ))}
+          </div>
+
+          {(config.serviceApi || config.serviceApiSsl) && config.blockHotspotRouterAccess && (
+            <div className="flex items-start gap-2 bg-cyan-950/40 border border-cyan-800/60 text-cyan-200 rounded-lg p-2.5 text-[11px] leading-relaxed">
+              <AlertTriangle className="w-4 h-4 text-cyan-300 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <span>
+                {isAr
+                  ? "ملاحظة: خدمة API مفعّلة مع تفعيل حظر منافذ الإدارة عن عملاء الهوتسبوت؛ إذا كان جهاز برنامج الكروت متصلاً عبر شبكة الهوتسبوت نفسها، أضف الـ IP أو MAC الخاص به كـ bypassed في IP Bindings بالأسفل."
+                  : "Note: API is enabled while Hotspot client management access is blocked; if your billing PC sits on the Hotspot LAN, add its IP/MAC as bypassed in IP Bindings below."}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Bypass FastTrack */}

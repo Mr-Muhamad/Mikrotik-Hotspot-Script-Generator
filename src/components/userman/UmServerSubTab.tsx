@@ -21,6 +21,7 @@ const OUTER_AUTH_OPTIONS = ["pap", "chap", "mschap1", "mschap2", "eap-tls", "eap
 export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }: Props) {
   const isAr = lang === "ar";
   const isV7 = config.rosVersion === "v7";
+  const isExternalRadius = config.radiusBackend === "external_radius";
   const umGroups = config.umGroups || [];
 
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -76,7 +77,9 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
         <div className="flex flex-col gap-1.5">
           <label htmlFor="um-radius-ip" className="text-slate-200 text-sm font-medium flex items-center gap-2">
             <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-            {isAr ? "عنوان IP الخاص بسيرفر اليوزر مانجر" : "RADIUS Server IP Address"}
+            {isExternalRadius
+              ? (isAr ? "عنوان IP لخادم RADIUS الخارجي" : "External RADIUS Server IP")
+              : (isAr ? "عنوان IP الخاص بسيرفر اليوزر مانجر" : "RADIUS Server IP Address")}
           </label>
           <input
             id="um-radius-ip"
@@ -86,10 +89,12 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
             className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
             value={config.radiusServerIp}
             onChange={(e) => onChange({ radiusServerIp: e.target.value })}
-            placeholder="127.0.0.1"
+            placeholder={isExternalRadius ? "192.168.1.200" : "127.0.0.1"}
           />
           <span className="text-xs text-slate-400">
-            {isAr ? "اكتب 127.0.0.1 إذا كان اليوزر مانجر محلياً على نفس الراوتر" : "Use 127.0.0.1 when running locally on the same MikroTik"}
+            {isExternalRadius
+              ? (isAr ? "عنوان IP الخاص بالخادم المستقل (FreeRADIUS أو برنامج الإدارة)" : "IPv4 address of your standalone external RADIUS server")
+              : (isAr ? "اكتب 127.0.0.1 إذا كان اليوزر مانجر محلياً على نفس الراوتر" : "Use 127.0.0.1 when running locally on the same MikroTik")}
           </span>
         </div>
 
@@ -119,24 +124,58 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
             </button>
           </div>
           <span className="text-xs text-slate-400">
-            {isAr ? "كلمة السر المتطابقة بين الهوتسبوت وخادم اليوزر مانجر" : "Shared secret authenticating RADIUS packets"}
+            {isAr ? "كلمة السر المتطابقة بين الهوتسبوت وخادم RADIUS" : "Shared secret authenticating RADIUS packets"}
           </span>
         </div>
 
+        {!isExternalRadius && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="um-router-name" className="text-slate-200 text-sm font-medium flex items-center gap-2">
+              <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              {isAr ? "اسم الراوتر في اليوزر مانجر" : "Router Name in User Manager"}
+            </label>
+            <input
+              id="um-router-name"
+              name="usermanRouterName"
+              dir="ltr"
+              type="text"
+              className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+              value={config.usermanRouterName}
+              onChange={(e) => onChange({ usermanRouterName: e.target.value })}
+              placeholder="Router1"
+            />
+          </div>
+        )}
+
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="um-router-name" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-            {isAr ? "اسم الراوتر في اليوزر مانجر" : "Router Name in User Manager"}
+          <label htmlFor="um-auth-port" className="text-slate-200 text-sm font-medium flex items-center gap-2">
+            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <span>{isAr ? "منفذ المصادقة (Auth Port)" : "RADIUS Auth Port"}</span>
           </label>
           <input
-            id="um-router-name"
-            name="usermanRouterName"
+            id="um-auth-port"
+            name="radiusPort"
             dir="ltr"
-            type="text"
+            type="number"
             className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
-            value={config.usermanRouterName}
-            onChange={(e) => onChange({ usermanRouterName: e.target.value })}
-            placeholder="Router1"
+            value={config.radiusPort}
+            onChange={(e) => onChange({ radiusPort: parseInt(e.target.value, 10) || 1812 })}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="um-acct-port" className="text-slate-200 text-sm font-medium flex items-center gap-2">
+            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <span>{isAr ? "منفذ المحاسبة (Accounting Port)" : "RADIUS Accounting Port"}</span>
+          </label>
+          <input
+            id="um-acct-port"
+            name="radiusAcctPort"
+            dir="ltr"
+            type="number"
+            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+            value={config.radiusAcctPort || (config.radiusPort || 1812) + 1}
+            onChange={(e) => onChange({ radiusAcctPort: parseInt(e.target.value, 10) || 1813 })}
           />
         </div>
 
@@ -157,22 +196,6 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="um-auth-port" className="text-slate-200 text-sm font-medium flex items-center gap-2">
-            <Hash className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-            <span>{isAr ? "منفذ المصادقة (Auth Port)" : "RADIUS Auth Port"}</span>
-          </label>
-          <input
-            id="um-auth-port"
-            name="radiusPort"
-            dir="ltr"
-            type="number"
-            className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
-            value={config.radiusPort}
-            onChange={(e) => onChange({ radiusPort: parseInt(e.target.value, 10) || 1812 })}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
           <label htmlFor="um-radius-timeout" className="text-slate-200 text-sm font-medium flex items-center gap-2">
             <Server className="w-4 h-4 text-emerald-400" aria-hidden="true" />
             <span>{isAr ? "مهلة الاستجابة (Timeout)" : "RADIUS Timeout"}</span>
@@ -188,6 +211,25 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
             placeholder="3000ms"
           />
         </div>
+
+        {(isExternalRadius || config.radiusServerIp.trim() !== "127.0.0.1") && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="um-radius-src" className="text-slate-200 text-sm font-medium flex items-center gap-2">
+              <Server className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+              <span>{isAr ? "عنوان المصدر للراوتر (src-address - اختياري)" : "NAS Source IP (src-address - Optional)"}</span>
+            </label>
+            <input
+              id="um-radius-src"
+              name="radiusSrcAddress"
+              dir="ltr"
+              type="text"
+              className="w-full min-h-[44px] sm:min-h-[38px] bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 font-mono"
+              value={config.radiusSrcAddress || ""}
+              onChange={(e) => onChange({ radiusSrcAddress: e.target.value })}
+              placeholder="192.168.1.2"
+            />
+          </div>
+        )}
       </div>
 
       {/* RADIUS Accounting */}
@@ -227,8 +269,24 @@ export default function UmServerSubTab({ config, onChange, lang, onDirtyChange }
         )}
       </div>
 
-      {/* Version-Specific Server Identity: Customer (v6) vs User Groups (v7) */}
-      {!isV7 ? (
+      {/* Version-Specific Server Identity or External RADIUS Reference */}
+      {isExternalRadius ? (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
+          <h3 className="text-sm font-medium text-cyan-300 flex items-center gap-2">
+            <Server className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+            {isAr ? "ملخص الربط مع خادم RADIUS الخارجي" : "External RADIUS NAS Integration Summary"}
+          </h3>
+          <p className="text-slate-300 leading-relaxed">
+            {isAr
+              ? `يضيف السكربت هذا الراوتر كعميل NAS باتجاه ${config.radiusServerIp || "RADIUS_IP"} (Auth: ${config.radiusPort || 1812} / Acct: ${config.radiusAcctPort || 1813}) ويفعّل استقبال أوامر الفصل CoA على منفذ ${config.coaPort || 3799} مع قاعدة قبول CoA في الجدار الناري.`
+              : `Configures this router as a Hotspot NAS targeting ${config.radiusServerIp || "RADIUS_IP"} (Auth: ${config.radiusPort || 1812} / Acct: ${config.radiusAcctPort || 1813}), enables incoming CoA disconnect on UDP ${config.coaPort || 3799}, and opens CoA in Firewall.`}
+          </p>
+          <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-3 font-mono text-[11px] text-slate-300 space-y-1" dir="ltr">
+            <div className="text-emerald-300 font-semibold">Common MikroTik RADIUS Reply Attributes:</div>
+            <div>Mikrotik-Rate-Limit := &quot;512k/2M&quot; | Mikrotik-Total-Limit | Session-Timeout | Mikrotik-Group | Framed-Pool</div>
+          </div>
+        </div>
+      ) : !isV7 ? (
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-4">
           <h3 className="text-sm font-medium text-slate-100 flex items-center gap-2">
             <Users className="w-4 h-4 text-emerald-400" aria-hidden="true" />

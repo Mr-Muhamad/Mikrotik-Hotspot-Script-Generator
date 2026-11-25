@@ -389,9 +389,12 @@ export const DEFAULT_CONFIG: HotspotConfig = {
 
   // RADIUS & User Manager
   enableUserManager: true,
+  radiusBackend: "userman_local",
   radiusSecret: "radius123",
   radiusServerIp: "127.0.0.1",
   radiusPort: 1812,
+  radiusAcctPort: 1813,
+  radiusSrcAddress: "",
   coaPort: 3799,
   radiusAccounting: true,
   radiusInterimUpdate: "00:05:00",
@@ -419,6 +422,8 @@ export const DEFAULT_CONFIG: HotspotConfig = {
   loginSubtitle: "سجل دخولك برقم الكارت أو الحساب للاتصال بالإنترنت",
   contactPhone: "01000000000",
   loginTheme: "emerald",
+  portalLoginMode: "both",
+  voucherPasswordMode: "same_as_user",
 
   // Advanced & Maintenance
   bypassFasttrack: true,
@@ -427,7 +432,12 @@ export const DEFAULT_CONFIG: HotspotConfig = {
   enableFirewallHardening: true,
   blockWanManagement: true,
   blockHotspotRouterAccess: true,
-  disableUnusedServices: true,
+  serviceTelnet: false,
+  serviceFtp: false,
+  serviceWww: true,
+  serviceSsh: true,
+  serviceApi: false,
+  serviceApiSsl: false,
   preventSharingTtl: false,
   enableDnsCache: true,
   queueType: "simple",
@@ -618,7 +628,31 @@ export function hydrateConfig(raw: unknown): HotspotConfig {
   merged.umProfiles = hydrateUmProfiles(raw.umProfiles);
   merged.umGroups = hydrateUmGroups(raw.umGroups);
 
-  const legacyVoucherKeys = [
+  merged.radiusBackend = raw.radiusBackend === "external_radius" ? "external_radius" : "userman_local";
+  merged.radiusAcctPort =
+    typeof raw.radiusAcctPort === "number"
+      ? raw.radiusAcctPort
+      : ((typeof raw.radiusPort === "number" ? raw.radiusPort : 1812) + 1);
+  merged.radiusSrcAddress = typeof raw.radiusSrcAddress === "string" ? raw.radiusSrcAddress : "";
+
+  merged.portalLoginMode =
+    raw.portalLoginMode === "voucher_only" || raw.portalLoginMode === "user_pass_only"
+      ? raw.portalLoginMode
+      : "both";
+  merged.voucherPasswordMode = raw.voucherPasswordMode === "blank" ? "blank" : "same_as_user";
+
+  if (typeof raw.disableUnusedServices === "boolean" && typeof raw.serviceApi !== "boolean") {
+    const enabledLegacy = !raw.disableUnusedServices;
+    merged.serviceTelnet = enabledLegacy;
+    merged.serviceFtp = enabledLegacy;
+    merged.serviceApi = enabledLegacy;
+    merged.serviceApiSsl = enabledLegacy;
+    merged.serviceWww = true;
+    merged.serviceSsh = true;
+  }
+
+  const legacyKeys = [
+    "disableUnusedServices",
     "generateVouchersBatch",
     "voucherTarget",
     "voucherCount",
@@ -631,7 +665,7 @@ export function hydrateConfig(raw: unknown): HotspotConfig {
     "voucherUmGroup",
     "voucherSharedUsers",
   ];
-  for (const key of legacyVoucherKeys) {
+  for (const key of legacyKeys) {
     delete (merged as unknown as Record<string, unknown>)[key];
   }
 

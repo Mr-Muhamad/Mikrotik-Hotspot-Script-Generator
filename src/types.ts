@@ -7,6 +7,12 @@ export type RouterOSVersion = "v6" | "v7";
 
 export type AuthMode = "hotspot_only" | "userman_radius" | "hybrid";
 
+export type RadiusBackend = "userman_local" | "external_radius";
+
+export type PortalLoginMode = "both" | "voucher_only" | "user_pass_only";
+
+export type VoucherPasswordMode = "same_as_user" | "blank";
+
 export type ResetCountersInterval = "disabled" | "hourly" | "daily" | "weekly" | "monthly";
 
 export type UmWeekday =
@@ -231,9 +237,12 @@ export interface HotspotConfig {
 
   // RADIUS & User Manager
   enableUserManager: boolean;
+  radiusBackend: RadiusBackend;
   radiusSecret: string;
   radiusServerIp: string;
   radiusPort: number;
+  radiusAcctPort: number;
+  radiusSrcAddress: string;
   coaPort: number;
   radiusAccounting: boolean;
   radiusInterimUpdate: string;
@@ -258,6 +267,8 @@ export interface HotspotConfig {
   loginSubtitle: string;     // e.g. "سجل دخولك للاتصال بالإنترنت"
   contactPhone: string;      // e.g. "01000000000"
   loginTheme: "emerald" | "blue" | "dark" | "purple";
+  portalLoginMode: PortalLoginMode;
+  voucherPasswordMode: VoucherPasswordMode;
 
   // Advanced features & Scripts
   bypassFasttrack: boolean;
@@ -266,7 +277,12 @@ export interface HotspotConfig {
   enableFirewallHardening: boolean;
   blockWanManagement: boolean;
   blockHotspotRouterAccess: boolean;
-  disableUnusedServices: boolean;
+  serviceTelnet: boolean;
+  serviceFtp: boolean;
+  serviceWww: boolean;
+  serviceSsh: boolean;
+  serviceApi: boolean;
+  serviceApiSsl: boolean;
   preventSharingTtl: boolean;
   enableDnsCache: boolean;
   queueType: "simple" | "cake" | "fq_codel";

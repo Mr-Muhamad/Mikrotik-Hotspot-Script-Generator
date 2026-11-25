@@ -31,6 +31,7 @@ export interface GeneratorContext {
   isV7: boolean;
   effectiveAuthMode: AuthMode;
   useRadius: boolean;
+  isExternalRadius: boolean;
   emitLocalHotspotProfiles: boolean;
   wanIface: string;
   lanIface: string;
@@ -70,6 +71,7 @@ export function buildGeneratorContext(
   const effectiveAuthMode: AuthMode =
     config.authMode || (config.enableUserManager ? "userman_radius" : "hotspot_only");
   const useRadius = effectiveAuthMode !== "hotspot_only";
+  const isExternalRadius = useRadius && config.radiusBackend === "external_radius";
   const emitLocalHotspotProfiles = effectiveAuthMode !== "userman_radius";
   const wanIface = sanitizeRosIdentifier(config.wanInterface, "ether1");
   const lanIface = sanitizeRosIdentifier(config.lanInterface, "ether2");
@@ -162,6 +164,7 @@ export function buildGeneratorContext(
     isV7,
     effectiveAuthMode,
     useRadius,
+    isExternalRadius,
     emitLocalHotspotProfiles,
     wanIface,
     lanIface,

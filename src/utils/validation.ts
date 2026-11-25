@@ -600,8 +600,10 @@ export function validateConfiguration(
     });
   }
 
-  // Tab 4: User Manager (active in userman_radius or hybrid mode)
+  // Tab 4: User Manager or External RADIUS (active in userman_radius or hybrid mode)
   if (effectiveAuthMode !== "hotspot_only") {
+    const isExternalRadius = config.radiusBackend === "external_radius";
+
     if (parseIpv4ToInt(config.radiusServerIp) === null) {
       issues.push({
         id: "um_radius_ip_invalid",
@@ -611,7 +613,29 @@ export function validateConfiguration(
         messageAr: `عنوان خادم RADIUS غير صالح: "${config.radiusServerIp}"`,
         messageEn: `Invalid RADIUS Server IP: "${config.radiusServerIp}"`,
       });
+    } else if (isExternalRadius && config.radiusServerIp.trim() === "127.0.0.1") {
+      issues.push({
+        id: "ext_radius_loopback_ip",
+        severity: "error",
+        tab: 4,
+        field: "radiusServerIp",
+        messageAr: "في وضع RADIUS الخارجي المستقل يجب إدخال عنوان IP الخادم الخارجي وليس 127.0.0.1",
+        messageEn: "Standalone External RADIUS mode requires the remote server IP address (cannot be 127.0.0.1)",
+      });
     }
+
+    const srcIp = (config.radiusSrcAddress || "").trim();
+    if (srcIp && parseIpv4ToInt(srcIp) === null) {
+      issues.push({
+        id: "um_radius_src_ip_invalid",
+        severity: "error",
+        tab: 4,
+        field: "radiusSrcAddress",
+        messageAr: `عنوان المصدر (Src-Address) لـ RADIUS غير صالح: "${srcIp}"`,
+        messageEn: `Invalid RADIUS source IP (src-address): "${srcIp}"`,
+      });
+    }
+
     if (!config.radiusSecret.trim()) {
       issues.push({
         id: "um_radius_secret_empty",
@@ -632,16 +656,28 @@ export function validateConfiguration(
       });
     }
 
-    if (config.rosVersion === "v6" && config.usermanAdminPass === "admin") {
-      issues.push({
-        id: "um_weak_v6_admin_pass",
-        severity: "warning",
-        tab: 4,
-        field: "usermanAdminPass",
-        messageAr: "كلمة مرور مدير اليوزر مانجر v6 الافتراضية (admin) ضعيفة، يوصى بتغييرها",
-        messageEn: "User Manager v6 owner password is still default (admin); consider changing it",
-      });
-    }
+    if (!isExternalRadius) {
+      if (config.serviceWww === false) {
+        issues.push({
+          id: "um_www_service_disabled",
+          severity: "warning",
+          tab: 5,
+          field: "serviceWww",
+          messageAr: "تعطيل خدمة WWW (Port 80) يوقف واجهة الويب الخاصة باليوزر مانجر (/um أو /userman) وWebFig",
+          messageEn: "Disabling WWW service (Port 80) blocks the User Manager web portal (/um or /userman) and WebFig",
+        });
+      }
+
+      if (config.rosVersion === "v6" && config.usermanAdminPass === "admin") {
+        issues.push({
+          id: "um_weak_v6_admin_pass",
+          severity: "warning",
+          tab: 4,
+          field: "usermanAdminPass",
+          messageAr: "كلمة مرور مدير اليوزر مانجر v6 الافتراضية (admin) ضعيفة، يوصى بتغييرها",
+          messageEn: "User Manager v6 owner password is still default (admin); consider changing it",
+        });
+      }
 
     const lims = config.umLimitations || [];
     const limIds = new Set<string>();
@@ -802,6 +838,7 @@ export function validateConfiguration(
           });
         }
       });
+    }
     }
   }
 
