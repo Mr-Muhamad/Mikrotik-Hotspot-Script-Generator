@@ -50,11 +50,11 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
   if (config.queueType === "cake" && isV7) {
     script += `/queue type remove [ find name=cake-hotspot ]\n`;
     script += `/queue type\n`;
-    script += `add name=cake-hotspot kind=cake cake-bandwidth=0 cake-memlimit=16MiB cake-nat=yes cake-rtt=100ms comment="CAKE Queue Type for Bufferbloat Elimination"\n\n`;
+    script += `add name=cake-hotspot kind=cake cake-bandwidth=0 cake-memlimit=16MiB cake-nat=yes cake-rtt=100ms\n\n`;
   } else if (config.queueType === "fq_codel" && isV7) {
     script += `/queue type remove [ find name=fq-codel-hotspot ]\n`;
     script += `/queue type\n`;
-    script += `add name=fq-codel-hotspot kind=fq-codel fq-codel-limit=10240 fq-codel-target=5ms fq-codel-interval=100ms comment="FQ-CoDel Queue Type"\n\n`;
+    script += `add name=fq-codel-hotspot kind=fq-codel fq-codel-limit=10240 fq-codel-target=5ms fq-codel-interval=100ms\n\n`;
   }
 
   script += `/queue simple remove [ find name="hs-parent-queue" ]\n`;
@@ -236,7 +236,7 @@ export function generateHotspotAndQueuesSection(ctx: GeneratorContext): string {
       script += `${buildHotspotProfileCmd(vlanProfName, vlan.gatewayIp, vlanDns)}\n`;
       script += `/ip hotspot remove [ find where name="hs-${vlan.safeVlanName}" or interface="${vlan.safeVlanName}" ]\n`;
       script += `/ip hotspot\n`;
-      script += `add address-pool=${vlanHotspotPool} addresses-per-mac=${addrPerMac} disabled=no interface="${vlan.safeVlanName}" name="hs-${vlan.safeVlanName}" profile="${vlanProfName}" comment="Hotspot on VLAN ${vlan.safeVlanId}"\n\n`;
+      script += `add address-pool=${vlanHotspotPool} addresses-per-mac=${addrPerMac} disabled=no interface="${vlan.safeVlanName}" name="hs-${vlan.safeVlanName}" profile="${vlanProfName}"\n\n`;
     });
   }
 

@@ -784,6 +784,12 @@ function assertValidRouterOsScript(script: string, label: string): void {
     if (/^\/(?:ip firewall (?:filter|nat|mangle)|ip hotspot (?:walled-garden|ip-binding))\s+remove\b/.test(stmt)) {
       assert.match(stmt, /!dynamic/, `${label}: remove command missing !dynamic guard: ${stmt}`);
     }
+    if (/^\/queue type\s+add\b/.test(stmt) || (/^add\b/.test(stmt) && /kind=(?:cake|fq-codel)\b/.test(stmt))) {
+      assert.doesNotMatch(stmt, /\bcomment=/, `${label}: /queue type add does not accept comment= in RouterOS: ${stmt}`);
+    }
+    if (/address-pool=.*addresses-per-mac=/.test(stmt)) {
+      assert.doesNotMatch(stmt, /\bcomment=/, `${label}: /ip hotspot add does not accept comment= in RouterOS: ${stmt}`);
+    }
   }
 
   // Definition-before-reference checks
@@ -1368,4 +1374,53 @@ test("Anti-Rogue DHCP Snooping and Loop Protect harden LAN bridge & ethernet por
   const hDisabled = hydrateConfig({ enableDhcpSnooping: false, enableLoopProtect: false });
   assert.equal(hDisabled.enableDhcpSnooping, false);
   assert.equal(hDisabled.enableLoopProtect, false);
+});
+
+test("Live CHR fixes: valid queue/hotspot attributes, v7 UM use-profiles=yes, and IP-conflict-safe UM router upserts", () => {
+  const v7CakeAndVlan = generateMikrotikScript(
+    makeBaseConfig({
+      rosVersion: "v7",
+      authMode: "userman_radius",
+      usermanRouterName: "LocalMikroTik",
+      queueType: "cake",
+      enableVlans: true,
+      vlans: [
+        {
+          id: "v10",
+          name: "vlan10_guest",
+          vlanId: 10,
+          parentInterface: "ether2",
+          gatewayIp: "172.16.10.1",
+          subnetMask: 24,
+          dhcpEnabled: true,
+          poolStart: "172.16.10.10",
+          poolEnd: "172.16.10.254",
+          enableHotspotOnVlan: true,
+        },
+      ],
+    }),
+    sampleHotspotProfiles
+  );
+
+  assert.match(v7CakeAndVlan, /\/queue type\nadd name=cake-hotspot kind=cake[^\n]+cake-rtt=100ms\n/);
+  assert.doesNotMatch(v7CakeAndVlan, /add name=cake-hotspot[^\n]*comment=/);
+  assert.doesNotMatch(v7CakeAndVlan, /name="hs-vlan10_guest"[^\n]*comment=/);
+  assert.match(v7CakeAndVlan, /\/user-manager\nset enabled=yes use-profiles=yes/);
+  assert.match(
+    v7CakeAndVlan,
+    /:if \(\[:len \[find name="LocalMikroTik"\]\] > 0\) do=\{[^\n]+\} else=\{ :if \(\[:len \[find address=127\.0\.0\.1\]\] > 0\) do=\{ set \[find address=127\.0\.0\.1\] shared-secret=/
+  );
+
+  const v7Fq = generateMikrotikScript(makeBaseConfig({ rosVersion: "v7", queueType: "fq_codel" }), sampleHotspotProfiles);
+  assert.match(v7Fq, /\/queue type\nadd name=fq-codel-hotspot kind=fq-codel[^\n]+fq-codel-interval=100ms\n/);
+  assert.doesNotMatch(v7Fq, /add name=fq-codel-hotspot[^\n]*comment=/);
+
+  const v6Um = generateMikrotikScript(
+    makeBaseConfig({ rosVersion: "v6", authMode: "userman_radius", usermanRouterName: "LocalMikroTik" }),
+    sampleHotspotProfiles
+  );
+  assert.match(
+    v6Um,
+    /:if \(\[:len \[find name="LocalMikroTik"\]\] > 0\) do=\{[^\n]+\} else=\{ :if \(\[:len \[find ip-address=127\.0\.0\.1\]\] > 0\) do=\{ set \[find ip-address=127\.0\.0\.1\] /
+  );
 });

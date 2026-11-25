@@ -73,10 +73,10 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
       // RouterOS v7 User Manager Syntax (/user-manager ...)
       script += `# RouterOS v7 User Manager Configuration\n`;
       script += `/user-manager\n`;
-      script += `set enabled=yes\n\n`;
+      script += `set enabled=yes use-profiles=yes\n\n`;
 
       script += `/user-manager router\n`;
-      script += `:if ([:len [find name="${safeUmRouter}"]] > 0) do={ set [find name="${safeUmRouter}"] address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort} } else={ add name="${safeUmRouter}" address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort} }\n\n`;
+      script += `:if ([:len [find name="${safeUmRouter}"]] > 0) do={ set [find name="${safeUmRouter}"] address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort} } else={ :if ([:len [find address=${radServerIp}]] > 0) do={ set [find address=${radServerIp}] shared-secret="${safeRadSecret}" coa-port=${coaPort} } else={ add name="${safeUmRouter}" address=${radServerIp} shared-secret="${safeRadSecret}" coa-port=${coaPort} } }\n\n`;
 
       if (umGroups.length > 0) {
         script += `/user-manager user group\n`;
@@ -208,7 +208,7 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
 
       const v6RouterSet = `ip-address=${radServerIp} shared-secret="${safeRadSecret}" use-coa=yes coa-port=${coaPort} comment="Connect UM Router"`;
       script += `/tool user-manager router\n`;
-      script += `:if ([:len [find name="${safeUmRouter}"]] > 0) do={ set [find name="${safeUmRouter}"] ${v6RouterSet} } else={ add customer="${safeUmAdminUser}" name="${safeUmRouter}" ${v6RouterSet} }\n\n`;
+      script += `:if ([:len [find name="${safeUmRouter}"]] > 0) do={ set [find name="${safeUmRouter}"] ${v6RouterSet} } else={ :if ([:len [find ip-address=${radServerIp}]] > 0) do={ set [find ip-address=${radServerIp}] ${v6RouterSet} } else={ add customer="${safeUmAdminUser}" name="${safeUmRouter}" ${v6RouterSet} } }\n\n`;
 
       if (config.syncProfilesToUserman && umLims.length > 0) {
         script += `# User Manager v6 Limitations (RX = Client Upload, TX = Client Download)\n`;
