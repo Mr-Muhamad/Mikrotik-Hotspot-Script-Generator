@@ -12,11 +12,13 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![RouterOS](https://img.shields.io/badge/MikroTik_RouterOS-v6_%26_v7-10B981?style=for-the-badge&logo=mikrotik&logoColor=white)](https://mikrotik.com/)
+[![CI](https://github.com/Mr-Muhamad/Mikrotik-Hotspot-Script-Generator/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-Muhamad/Mikrotik-Hotspot-Script-Generator/actions/workflows/ci.yml)
+[![Deploy to GitHub Pages](https://github.com/Mr-Muhamad/Mikrotik-Hotspot-Script-Generator/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/Mr-Muhamad/Mikrotik-Hotspot-Script-Generator/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge)](./LICENSE)
 
 <br />
 
-**[🇸🇦 التوثيق باللغة العربية](#arabic)** &nbsp;|&nbsp; **[🇬🇧 English Documentation](#english)**
+**[🚀 تشغيل الأداة مباشرة (Live Demo)](https://mr-muhamad.github.io/Mikrotik-Hotspot-Script-Generator/)** &nbsp;|&nbsp; **[🇸🇦 التوثيق باللغة العربية](#arabic)** &nbsp;|&nbsp; **[🇬🇧 English Documentation](#english)**
 
 </div>
 
@@ -82,9 +84,11 @@
 
 ---
 
-### 🚀 التثبيت والتشغيل المحلي
+### 🚀 التشغيل المباشر والتثبيت المحلي
 
-تأكد من توفر [Node.js](https://nodejs.org/) (الإصدار 22 أو أحدث موصى به، ويدعم Node 18+) على جهازك، ثم نفّذ الأوامر التالية:
+يمكنك فتح الأداة وتشغيلها فوراً عبر المتصفح دون أي تثبيت من خلال رابط النشر المباشر: [https://mr-muhamad.github.io/Mikrotik-Hotspot-Script-Generator/](https://mr-muhamad.github.io/Mikrotik-Hotspot-Script-Generator/).
+
+وللتشغيل المحلي، تأكد من توفر [Node.js](https://nodejs.org/) (الإصدار 22 أو أحدث موصى به، ويدعم Node 18+) على جهازك، ثم نفّذ الأوامر التالية:
 
 </div>
 
@@ -149,7 +153,7 @@ npm run build
 | **4. Hotspot User Profiles** | Subscriber mode selector, NAS `default` + `trial-profile` config, and `/ip hotspot user profile` builder (`RX/TX`, `min-rx/min-tx`, Burst, `status-autorefresh`, `add-mac-cookie`, `address-pool`, `address-list`, `insert-queue-before`, plus optional `on-login` expiry scheduler). |
 | **5. User Manager Studio (v6 & v7)** | Three focused sub-tabs: **(1) RADIUS & Server** (CoA `3799`, v6 `customer`, v7 `user group` with `outer-auths` & RADIUS `attributes`), **(2) Limitations** (`rate-limit-rx/tx`, `transfer`/`download`/`upload` limits, v7 `reset-counters-interval`, one-click clone from Hotspot speeds), and **(3) Profiles & Schedules** (time-windowed `profile-limitation` + Day/Night Boost preset). |
 | **6. Security & Batch Vouchers** | Safe **FastTrack bypass**, Firewall hardening, `TTL=1` anti-sharing, **Walled Garden** (HTTP + HTTPS IP), `IP Bindings`, v7 `CAKE`/`FQ-CoDel` queues, nightly maintenance scripts, mode-aware Batch Voucher Generator, **Printable Voucher Cards**, and **CSV export**. |
-| **7. 5-File Captive Portal Suite** | Interactive captive portal builder with clean live iframe preview, 4 themes, Voucher + Username/Password tabs, and full 5-file RouterOS portal suite (`login.html`, `status.html`, `logout.html`, `alogin.html`, `md5.js`) for seamless CHAP authentication and session status/logout flows. |
+| **7. 5-File Captive Portal Suite** | Interactive captive portal builder with clean live iframe preview, 4 themes, Voucher + Username/Password tabs, and full 5-file RouterOS portal suite (`login.html`, `status.html`, `logout.html`, `alogin.html`, `md5.js`) for CHAP authentication and session status/logout flows. |
 | **8. Live Script Viewer, Secret-Free JSON & ZIP Bundle** | Search with match count, section jump, line-wrap toggle, copy script, `.rsc` download, **Secret-Free Shareable JSON** export (`stripConfigSecrets` strips PPPoE passwords, RADIUS secret, User Manager admin password, and voucher codes), and one-click **ZIP Deployment Bundle** export (`hotspot/` or `flash/hotspot/` portal files + `.rsc` + `README_DEPLOY.txt` instructing to import `.rsc` first, then upload the 5-file portal folder). |
 
 ---
@@ -177,7 +181,9 @@ The RouterOS generation pipeline is organized modularly under `src/utils/generat
 
 ---
 
-### 🚀 Quick Start & Verification
+### 🚀 Live App & Local Quick Start
+
+Run the tool directly in your browser with zero setup via GitHub Pages: [https://mr-muhamad.github.io/Mikrotik-Hotspot-Script-Generator/](https://mr-muhamad.github.io/Mikrotik-Hotspot-Script-Generator/).
 
 ```bash
 # Install dependencies
