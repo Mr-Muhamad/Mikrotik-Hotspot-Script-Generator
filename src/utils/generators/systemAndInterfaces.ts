@@ -113,11 +113,13 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
     script += `add name="${escapeRosString(effectiveLan)}" protocol-mode=rstp dhcp-snooping=${dhcpSnoopFlag} vlan-filtering=no comment="Hotspot LAN Bridge"\n`;
     if (bridgePorts.length > 0) {
       bridgePorts.forEach((port) => {
+        script += `/ip hotspot remove [ find interface=${port} ]\n`;
+        script += `/ip dhcp-server remove [ find interface=${port} ]\n`;
         script += `/interface bridge port remove [ find interface=${port} ]\n`;
       });
       script += `/interface bridge port\n`;
       bridgePorts.forEach((port) => {
-        script += `add bridge="${escapeRosString(effectiveLan)}" interface=${port}${bridgeTrustedAttr}\n`;
+        script += `:if ([:len [/interface find name="${port}"]] > 0) do={ add bridge="${escapeRosString(effectiveLan)}" interface=${port}${bridgeTrustedAttr} }\n`;
       });
     }
     script += `\n`;
@@ -127,7 +129,7 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
 
   // WAN Client / Static / PPPoE Configuration
   if (isMultiWan) {
-    config.wanLines.forEach((line) => {
+    config.wanLines.forEach((line, idx) => {
       const lineIface = sanitizeRosIdentifier(line.interfaceName, "ether1");
       const safeLineName = escapeRosString(line.name);
       if (isPhysicalInterface(lineIface) && !commentedPhysicalIfaces.has(lineIface)) {
@@ -137,6 +139,8 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
       if (isBridgeAssignablePort(lineIface)) {
         script += `/interface bridge port remove [ find interface=${lineIface} ]\n`;
       }
+      script += `/ip hotspot remove [ find interface=${lineIface} ]\n`;
+      script += `/ip dhcp-server remove [ find interface=${lineIface} ]\n`;
       if (line.type !== "dhcp") {
         script += `/ip dhcp-client remove [ find interface=${lineIface} ]\n`;
       }
@@ -146,9 +150,22 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
       }
 
       if (line.type === "dhcp") {
+        const gwExpr = line.useInterfaceGateway
+          ? `($"gateway-address" . "%${lineIface}")`
+          : `$"gateway-address"`;
+        const rawLeaseHook =
+          `:if ([:tonum $bound]=1 && [:len $"gateway-address"] > 0) do={ :local gw ${gwExpr}; ` +
+          `/ip route set [find where !dynamic and (` +
+          `comment="Recursive Canary for ${safeLineName}" or ` +
+          `comment="PCC Route for ${safeLineName}" or ` +
+          `comment="NTH Route for ${safeLineName}" or ` +
+          `comment="Fallback route via ${safeLineName}" or ` +
+          `comment="Failover Line ${idx + 1}: ${safeLineName}" or ` +
+          `comment="ECMP Route ${idx + 1}: ${safeLineName}"` +
+          `)] gateway=$gw }`;
         script += `/ip dhcp-client remove [ find interface=${lineIface} ]\n`;
         script += `/ip dhcp-client\n`;
-        script += `add interface=${lineIface} disabled=no add-default-route=no use-peer-dns=no comment="DHCP Client for ${safeLineName} (Multi-WAN managed routes)"\n\n`;
+        script += `add interface=${lineIface} disabled=no add-default-route=no use-peer-dns=no script="${escapeRosString(rawLeaseHook)}" comment="DHCP Client for ${safeLineName} (Multi-WAN managed routes)"\n\n`;
       } else if (line.type === "pppoe") {
         script += `/interface pppoe-client remove [ find name="${escapeRosString(pppoeName)}" ]\n`;
         script += `/interface pppoe-client\n`;
@@ -172,6 +189,8 @@ export function generateSystemAndInterfacesSection(ctx: GeneratorContext): strin
     if (isBridgeAssignablePort(wanIface)) {
       script += `/interface bridge port remove [ find interface=${wanIface} ]\n`;
     }
+    script += `/ip hotspot remove [ find interface=${wanIface} ]\n`;
+    script += `/ip dhcp-server remove [ find interface=${wanIface} ]\n`;
     const singleType = config.singleWanType || "dhcp";
     if (singleType !== "dhcp") {
       script += `/ip dhcp-client remove [ find comment="Primary WAN DHCP Client" ]\n`;

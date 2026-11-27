@@ -6,6 +6,7 @@
 import { useState } from "react";
 import type { HotspotConfig, LoadBalancingMethod, WanLine } from "../types";
 import type { ValidationIssue } from "../utils/validation";
+import { DEFAULT_CANARIES } from "../utils/scriptGenerator";
 import { Eye, EyeOff, Network, Plus, Trash2, Zap } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -25,8 +26,8 @@ export default function LoadBalancingTab({ config, onChange, lang, issues = [] }
     let defaultWanLines = config.wanLines || [];
     if (method !== "none" && defaultWanLines.length === 0) {
       defaultWanLines = [
-        { id: "wan_1", name: "WAN1_DSL1", interfaceName: config.wanInterface || "ether1", gatewayIp: "192.168.1.1", staticIp: "192.168.1.2/24", checkHost: "8.8.8.8", useInterfaceGateway: false, distance: 1, weight: 1, type: "dhcp" },
-        { id: "wan_2", name: "WAN2_DSL2", interfaceName: "ether3", gatewayIp: "192.168.2.1", staticIp: "192.168.2.2/24", checkHost: "1.1.1.1", useInterfaceGateway: false, distance: 1, weight: 1, type: "dhcp" }
+        { id: "wan_1", name: "WAN1_DSL1", interfaceName: config.wanInterface || "ether1", gatewayIp: "192.168.1.1", staticIp: "192.168.1.2/24", checkHost: DEFAULT_CANARIES[0], useInterfaceGateway: false, distance: 1, weight: 1, type: "dhcp" },
+        { id: "wan_2", name: "WAN2_DSL2", interfaceName: "ether3", gatewayIp: "192.168.2.1", staticIp: "192.168.2.2/24", checkHost: DEFAULT_CANARIES[1], useInterfaceGateway: false, distance: 1, weight: 1, type: "dhcp" }
       ];
     }
     onChange({ loadBalancingMethod: method, wanLines: defaultWanLines });
@@ -40,7 +41,7 @@ export default function LoadBalancingTab({ config, onChange, lang, issues = [] }
       interfaceName: `ether${nextIdx + 1}`,
       gatewayIp: `192.168.${nextIdx}.1`,
       staticIp: `192.168.${nextIdx}.2/24`,
-      checkHost: nextIdx % 2 === 1 ? "8.8.8.8" : "1.1.1.1",
+      checkHost: DEFAULT_CANARIES[(nextIdx - 1) % DEFAULT_CANARIES.length],
       useInterfaceGateway: false,
       distance: 1,
       weight: 1,
@@ -411,7 +412,7 @@ export default function LoadBalancingTab({ config, onChange, lang, issues = [] }
                         }`}
                         value={line.checkHost || ""}
                         onChange={(e) => handleUpdateWanLine(line.id, { checkHost: e.target.value })}
-                        placeholder={index % 2 === 0 ? "8.8.8.8" : "1.1.1.1"}
+                        placeholder={DEFAULT_CANARIES[index % DEFAULT_CANARIES.length]}
                       />
                       {checkHostError && (
                         <span className="text-xs text-red-300 mt-1 block">{isAr ? checkHostError.messageAr : checkHostError.messageEn}</span>

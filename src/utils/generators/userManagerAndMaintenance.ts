@@ -62,7 +62,9 @@ export function generateUserManagerAndMaintenanceSection(ctx: GeneratorContext):
     script += `# MikroTik RADIUS Client Configuration\n`;
     script += `/radius remove [ find where comment="Radius link for User Manager" or comment="External RADIUS Server for Hotspot" ]\n`;
     script += `/radius\n`;
-    script += `add service=hotspot address=${radServerIp} secret="${safeRadSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=${radTimeout}${srcAddressParam} comment="${radiusComment}"\n\n`;
+    script += `add service=hotspot address=${radServerIp} secret="${safeRadSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=${radTimeout}${srcAddressParam} comment="${radiusComment}"\n`;
+    const parseSafeRadCmd = escapeRosString(`/radius set [ find where comment="${radiusComment}" ] require-message-auth=no`);
+    script += `:do { [[:parse "${parseSafeRadCmd}"]] } on-error={}\n\n`;
 
     script += `/radius incoming\n`;
     script += `set accept=yes port=${coaPort}\n\n`;

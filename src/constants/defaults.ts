@@ -18,6 +18,7 @@ import type {
   WalledGardenEntry,
   WanLine,
 } from "../types";
+import { DEFAULT_CANARIES } from "../utils/generators/helpers.ts";
 
 export const CONFIG_SCHEMA_VERSION = 3;
 
@@ -349,7 +350,7 @@ export const DEFAULT_CONFIG: HotspotConfig = {
       interfaceName: "ether1",
       gatewayIp: "192.168.1.1",
       staticIp: "192.168.1.2/24",
-      checkHost: "8.8.8.8",
+      checkHost: "8.8.4.4",
       useInterfaceGateway: false,
       distance: 1,
       weight: 1,
@@ -361,7 +362,7 @@ export const DEFAULT_CONFIG: HotspotConfig = {
       interfaceName: "ether3",
       gatewayIp: "192.168.2.1",
       staticIp: "192.168.2.2/24",
-      checkHost: "1.1.1.1",
+      checkHost: "1.0.0.1",
       useInterfaceGateway: false,
       distance: 1,
       weight: 1,
@@ -599,7 +600,7 @@ export function hydrateConfig(raw: unknown): HotspotConfig {
         interfaceName: typeof l.interfaceName === "string" && l.interfaceName ? l.interfaceName : `ether${idx + 1}`,
         gatewayIp: typeof l.gatewayIp === "string" ? l.gatewayIp : `192.168.${idx + 1}.1`,
         staticIp: typeof l.staticIp === "string" ? l.staticIp : `192.168.${idx + 1}.2/24`,
-        checkHost: typeof l.checkHost === "string" ? l.checkHost : (idx % 2 === 0 ? "8.8.8.8" : "1.1.1.1"),
+        checkHost: typeof l.checkHost === "string" ? l.checkHost : DEFAULT_CANARIES[idx % DEFAULT_CANARIES.length],
         useInterfaceGateway: Boolean(l.useInterfaceGateway),
         distance: typeof l.distance === "number" ? l.distance : idx + 1,
         weight: typeof l.weight === "number" ? Math.max(1, l.weight) : 1,

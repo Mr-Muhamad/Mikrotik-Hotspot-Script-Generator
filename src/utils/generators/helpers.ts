@@ -5,7 +5,14 @@
 
 import type { HotspotUserProfile, WanLine } from "../../types";
 
-const DEFAULT_CANARIES = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1"];
+export const DEFAULT_CANARIES = [
+  "8.8.4.4",
+  "1.0.0.1",
+  "9.9.9.9",
+  "208.67.222.222",
+  "208.67.220.220",
+  "149.112.112.112",
+] as const;
 
 export function escapeRosString(value: string): string {
   return value
@@ -251,5 +258,5 @@ export function buildLocalExpiryOnLoginScript(
   const cleanVal = sanitizeRosIdentifier(validity, "");
   if (!cleanVal || cleanVal === "0s") return "";
   const userOp = action === "disable" ? "disable" : "remove";
-  return `:local u $user; :if ([:len [/system scheduler find name=("exp-" . $u)]] = 0) do={ :local d [/system clock get date]; :local t [/system clock get time]; :delay 1s; /system scheduler add name=("exp-" . $u) start-date=$d start-time=$t interval=${cleanVal} on-event=("/ip hotspot active remove [find user=\\"" . $u . "\\"]; /ip hotspot cookie remove [find user=\\"" . $u . "\\"]; /ip hotspot user ${userOp} [find name=\\"" . $u . "\\"]; /system scheduler remove [find name=\\"exp-" . $u . "\\"]") comment=("Auto-expire " . $u) }`;
+  return `:local u $user; :if ([:len [/system scheduler find name=("exp-" . $u)]] = 0) do={ :local d [/system clock get date]; :local t [/system clock get time]; :delay 1s; :local yr [:tonum [:pick $d 0 4]]; :if ([:typeof $yr] != "num" || $yr < 1970) do={ :set yr [:tonum [:pick $d 7 11]] }; :if ($yr >= 2024) do={ /system scheduler add name=("exp-" . $u) start-date=$d start-time=$t interval=${cleanVal} on-event=("/ip hotspot active remove [find user=\\"" . $u . "\\"]; /ip hotspot cookie remove [find user=\\"" . $u . "\\"]; /ip hotspot user ${userOp} [find name=\\"" . $u . "\\"]; /system scheduler remove [find name=\\"exp-" . $u . "\\"]") comment=("Auto-expire " . $u) } }`;
 }

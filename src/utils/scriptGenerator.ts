@@ -12,6 +12,7 @@ import { generateFirewallAndSecuritySection } from "./generators/firewallAndSecu
 import { generateUserManagerAndMaintenanceSection } from "./generators/userManagerAndMaintenance.ts";
 
 export {
+  DEFAULT_CANARIES,
   escapeRosString,
   sanitizeRosIdentifier,
   sanitizeIpv4,

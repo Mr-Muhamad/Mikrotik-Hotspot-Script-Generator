@@ -103,7 +103,9 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
         const untagged = (vlan.untaggedPorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean);
         const tagged = (vlan.taggedPorts || "").split(",").map((p) => sanitizeRosIdentifier(p, "")).filter(Boolean);
         untagged.forEach((port) => {
-          untaggedCommands.push(`set [ find bridge="${escapeRosString(effectiveLan)}" interface=${port} ] pvid=${vlan.safeVlanId}`);
+          untaggedCommands.push(
+            `:if ([:len [find bridge="${escapeRosString(effectiveLan)}" interface=${port}]] > 0) do={ set [ find bridge="${escapeRosString(effectiveLan)}" interface=${port} ] pvid=${vlan.safeVlanId} }`
+          );
         });
         if (!bridgeVlanByVid.has(vlan.safeVlanId)) {
           bridgeVlanByVid.set(vlan.safeVlanId, {
@@ -127,10 +129,27 @@ export function generateVlansAndMultiWanSection(ctx: GeneratorContext): string {
       });
       script += `/interface bridge vlan\n`;
       bridgeVlanByVid.forEach(({ tagged, untagged }, vid) => {
-        const taggedList = Array.from(tagged).join(",");
+        const safeBr = escapeRosString(effectiveLan);
+        const extraTagged = Array.from(tagged).filter((p) => p !== effectiveLan);
         const untaggedArr = Array.from(untagged);
-        const untaggedClause = untaggedArr.length > 0 ? ` untagged=${untaggedArr.join(",")}` : "";
-        script += `add bridge="${escapeRosString(effectiveLan)}" vlan-ids=${vid} tagged=${taggedList}${untaggedClause}\n`;
+        if (extraTagged.length === 0 && untaggedArr.length === 0) {
+          script += `add bridge="${safeBr}" vlan-ids=${vid} tagged="${safeBr}"\n`;
+        } else {
+          const parts: string[] = [`:local tg [:toarray "${safeBr}"]`];
+          extraTagged.forEach((p) => {
+            parts.push(`:if ([:len [/interface find name="${p}"]] > 0) do={ :set tg ($tg , "${p}") }`);
+          });
+          if (untaggedArr.length > 0) {
+            parts.push(`:local ut [:toarray ""]`);
+            untaggedArr.forEach((p) => {
+              parts.push(`:if ([:len [/interface find name="${p}"]] > 0) do={ :set ut ($ut , "${p}") }`);
+            });
+            parts.push(`add bridge="${safeBr}" vlan-ids=${vid} tagged=$tg untagged=$ut`);
+          } else {
+            parts.push(`add bridge="${safeBr}" vlan-ids=${vid} tagged=$tg`);
+          }
+          script += `{ ${parts.join("; ")} }\n`;
+        }
       });
 
       script += `/interface bridge\n`;

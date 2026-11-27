@@ -547,6 +547,23 @@ export function validateConfiguration(
         });
       }
     });
+
+    if (config.enableRecursiveFailover && canaryCounts.size > 0) {
+      const validDns = (config.dnsServers || [])
+        .map((s) => s.trim())
+        .filter((s) => Boolean(s) && parseIpv4ToInt(s) !== null);
+      const collidingDns = validDns.filter((dns) => canaryCounts.has(dns));
+      if (validDns.length > 0 && collidingDns.length === validDns.length) {
+        issues.push({
+          id: "wan_canary_matches_all_dns",
+          severity: "warning",
+          tab: 2,
+          field: "checkHost",
+          messageAr: `جميع خوادم الـ DNS (${collidingDns.join(", ")}) مستخدمة أيضاً كأهداف فحص متكرر (/32)؛ يفضل تخصيص عناوين فحص مستقلة مثل 8.8.4.4 و 1.0.0.1 حتى لا يتأثر الـ DNS عند سقوط أحد الخطوط`,
+          messageEn: `All DNS servers (${collidingDns.join(", ")}) are also pinned as Recursive Canary (/32) hosts; use dedicated canary IPs like 8.8.4.4 and 1.0.0.1 so DNS stays reachable during failover`,
+        });
+      }
+    }
   }
 
   // Tab 3: Local Hotspot User Profiles (active in hotspot_only or hybrid mode)
@@ -608,6 +625,30 @@ export function validateConfiguration(
             field: `profile_${idx}_rate`,
             messageAr: `الحد الأدنى المضمون (Min) في "${prof.name}" أكبر من السرعة القصوى`,
             messageEn: `Minimum guaranteed rate on "${prof.name}" exceeds max rate`,
+          });
+        }
+        const burstUl = prof.burstUpload?.trim() ? speedToBps(prof.burstUpload) : 0;
+        const burstDl = prof.burstDownload?.trim() ? speedToBps(prof.burstDownload) : 0;
+        if ((burstUl > 0 && burstUl < maxUl) || (burstDl > 0 && burstDl < maxDl)) {
+          issues.push({
+            id: `prof_burst_below_max_${prof.id}`,
+            severity: "error",
+            tab: 3,
+            field: `profile_${idx}_rate`,
+            messageAr: `سرعة الـ Burst في بروفايل "${prof.name}" أقل من السرعة القصوى (يجب أن يكون Burst >= Max)`,
+            messageEn: `Burst rate on profile "${prof.name}" is lower than max rate (Burst must be >= Max)`,
+          });
+        }
+        const threshUl = prof.burstThresholdUpload?.trim() ? speedToBps(prof.burstThresholdUpload) : 0;
+        const threshDl = prof.burstThresholdDownload?.trim() ? speedToBps(prof.burstThresholdDownload) : 0;
+        if ((threshUl > 0 && burstUl > 0 && threshUl > burstUl) || (threshDl > 0 && burstDl > 0 && threshDl > burstDl)) {
+          issues.push({
+            id: `prof_burst_thresh_exceeds_burst_${prof.id}`,
+            severity: "error",
+            tab: 3,
+            field: `profile_${idx}_rate`,
+            messageAr: `حد الـ Burst Threshold في بروفايل "${prof.name}" أكبر من سرعة الـ Burst`,
+            messageEn: `Burst threshold on profile "${prof.name}" exceeds burst rate`,
           });
         }
       }
@@ -754,6 +795,30 @@ export function validateConfiguration(
             field: `umLim_${idx}_rate`,
             messageAr: `الحد الأدنى (Min) في قيد "${lim.name}" أكبر من السرعة القصوى`,
             messageEn: `Minimum rate on limitation "${lim.name}" exceeds max rate`,
+          });
+        }
+        const burstRx = lim.rateLimitBurstRx?.trim() ? speedToBps(lim.rateLimitBurstRx) : 0;
+        const burstTx = lim.rateLimitBurstTx?.trim() ? speedToBps(lim.rateLimitBurstTx) : 0;
+        if ((burstRx > 0 && burstRx < maxRx) || (burstTx > 0 && burstTx < maxTx)) {
+          issues.push({
+            id: `um_lim_burst_below_max_${lim.id}`,
+            severity: "error",
+            tab: 4,
+            field: `umLim_${idx}_rate`,
+            messageAr: `سرعة الـ Burst في قيد "${lim.name}" أقل من السرعة القصوى (يجب أن يكون Burst >= Max)`,
+            messageEn: `Burst rate on limitation "${lim.name}" is lower than max rate (Burst must be >= Max)`,
+          });
+        }
+        const threshRx = lim.rateLimitBurstThresholdRx?.trim() ? speedToBps(lim.rateLimitBurstThresholdRx) : 0;
+        const threshTx = lim.rateLimitBurstThresholdTx?.trim() ? speedToBps(lim.rateLimitBurstThresholdTx) : 0;
+        if ((threshRx > 0 && burstRx > 0 && threshRx > burstRx) || (threshTx > 0 && burstTx > 0 && threshTx > burstTx)) {
+          issues.push({
+            id: `um_lim_burst_thresh_exceeds_burst_${lim.id}`,
+            severity: "error",
+            tab: 4,
+            field: `umLim_${idx}_rate`,
+            messageAr: `حد الـ Burst Threshold في قيد "${lim.name}" أكبر من سرعة الـ Burst`,
+            messageEn: `Burst threshold on limitation "${lim.name}" exceeds burst rate`,
           });
         }
       }

@@ -1424,3 +1424,143 @@ test("Live CHR fixes: valid queue/hotspot attributes, v7 UM use-profiles=yes, an
     /:if \(\[:len \[find name="LocalMikroTik"\]\] > 0\) do=\{[^\n]+\} else=\{ :if \(\[:len \[find ip-address=127\.0\.0\.1\]\] > 0\) do=\{ set \[find ip-address=127\.0\.0\.1\] /
   );
 });
+
+test("Six edge-case hardenings: BlastRADIUS guard, 1970 clock guard, DHCP WAN lease-script, dirty-port guards, burst validation, and decoupled canaries", () => {
+  // 1. BlastRADIUS runtime-parsed require-message-auth=no guard
+  const umScript = generateMikrotikScript(
+    makeBaseConfig({ rosVersion: "v6", authMode: "userman_radius" }),
+    sampleHotspotProfiles
+  );
+  assert.match(
+    umScript,
+    /:do \{ \[\[:parse "\/radius set \[ find where comment=\\"Radius link for User Manager\\" \] require-message-auth=no"\]\] \} on-error=\{\}/
+  );
+
+  // 2. Power-outage 1970 clock reset guard in local expiry script
+  const expScript = buildLocalExpiryOnLoginScript("30d", "remove");
+  assert.match(expScript, /:local yr \[:tonum \[:pick \$d 0 4\]\];/);
+  assert.match(expScript, /:if \(\$yr >= 2024\) do=\{ \/system scheduler add/);
+
+  // 3. Multi-WAN DHCP lease-script + 4. Dirty-port cleanup & bridge port existence guards
+  const multiWanBridge = generateMikrotikScript(
+    makeBaseConfig({
+      rosVersion: "v7",
+      useLanBridge: true,
+      lanBridgeName: "bridge-lan",
+      lanBridgePorts: "ether2,ether5",
+      enableVlans: true,
+      enableBridgeVlanFiltering: true,
+      vlans: [
+        {
+          id: "v10",
+          name: "vlan10",
+          vlanId: 10,
+          parentInterface: "bridge-lan",
+          gatewayIp: "172.16.10.1",
+          subnetMask: 24,
+          dhcpEnabled: true,
+          poolStart: "172.16.10.10",
+          poolEnd: "172.16.10.250",
+          enableHotspotOnVlan: false,
+          untaggedPorts: "ether5",
+        },
+      ],
+      loadBalancingMethod: "pcc",
+      enableRecursiveFailover: true,
+      wanLines: [
+        {
+          id: "w1",
+          name: "WAN_4G",
+          interfaceName: "ether1",
+          gatewayIp: "192.168.8.1",
+          checkHost: "8.8.4.4",
+          useInterfaceGateway: true,
+          distance: 1,
+          weight: 1,
+          type: "dhcp",
+        },
+        {
+          id: "w2",
+          name: "WAN_DSL",
+          interfaceName: "ether3",
+          gatewayIp: "192.168.1.1",
+          checkHost: "1.0.0.1",
+          useInterfaceGateway: false,
+          distance: 2,
+          weight: 1,
+          type: "dhcp",
+        },
+      ],
+    }),
+    sampleHotspotProfiles
+  );
+  assert.match(multiWanBridge, /\/ip dhcp-server remove \[ find interface=ether1 \]/);
+  assert.match(multiWanBridge, /\/ip hotspot remove \[ find interface=ether1 \]/);
+  assert.match(multiWanBridge, /\/ip dhcp-server remove \[ find interface=ether2 \]/);
+  assert.match(
+    multiWanBridge,
+    /:if \(\[:len \[\/interface find name="ether5"\]\] > 0\) do=\{ add bridge="bridge-lan" interface=ether5 trusted=no \}/
+  );
+  assert.match(
+    multiWanBridge,
+    /:if \(\[:len \[find bridge="bridge-lan" interface=ether5\]\] > 0\) do=\{ set \[ find bridge="bridge-lan" interface=ether5 \] pvid=10 \}/
+  );
+  assert.match(multiWanBridge, /script=":if \(\[:tonum \\\$bound\]=1 && \[:len \\\$\\"gateway-address\\"\] > 0\)/);
+  assert.match(multiWanBridge, /\(\\\$\\"gateway-address\\" \. \\"%ether1\\"\)/);
+
+  // 5. Burst < Max & BurstThreshold > Burst validation errors
+  const burstIssues = validateConfiguration(
+    makeBaseConfig({
+      authMode: "hybrid",
+      umLimitations: [
+        {
+          id: "lim_bad_burst",
+          name: "bad-burst",
+          rateLimitRx: "2M",
+          rateLimitTx: "8M",
+          rateLimitBurstRx: "1M",
+          rateLimitBurstTx: "10M",
+          rateLimitBurstThresholdTx: "12M",
+          resetCountersInterval: "disabled",
+        },
+      ],
+    }),
+    [
+      {
+        ...sampleHotspotProfiles[0],
+        id: "hp_bad_burst",
+        uploadLimit: "2M",
+        downloadLimit: "8M",
+        burstUpload: "1M",
+        burstDownload: "10M",
+        burstThresholdDownload: "12M",
+      },
+    ]
+  );
+  const burstIds = new Set(burstIssues.map((i) => i.id));
+  assert.ok(burstIds.has("prof_burst_below_max_hp_bad_burst"));
+  assert.ok(burstIds.has("prof_burst_thresh_exceeds_burst_hp_bad_burst"));
+  assert.ok(burstIds.has("um_lim_burst_below_max_lim_bad_burst"));
+  assert.ok(burstIds.has("um_lim_burst_thresh_exceeds_burst_lim_bad_burst"));
+
+  // 6. Decoupled default canary hosts & DNS-canary overlap warning
+  assert.equal(DEFAULT_CONFIG.wanLines[0].checkHost, "8.8.4.4");
+  assert.equal(DEFAULT_CONFIG.wanLines[1].checkHost, "1.0.0.1");
+  assert.equal(
+    validateConfiguration(makeBaseConfig({ loadBalancingMethod: "pcc" }), sampleHotspotProfiles).length,
+    0
+  );
+  const dnsPinnedIssues = validateConfiguration(
+    makeBaseConfig({
+      loadBalancingMethod: "pcc",
+      enableRecursiveFailover: true,
+      dnsServers: ["8.8.8.8", "1.1.1.1"],
+      wanLines: [
+        { id: "w1", name: "W1", interfaceName: "ether1", gatewayIp: "192.168.1.1", checkHost: "8.8.8.8", distance: 1, weight: 1, type: "dhcp" },
+        { id: "w2", name: "W2", interfaceName: "ether3", gatewayIp: "192.168.2.1", checkHost: "1.1.1.1", distance: 2, weight: 1, type: "dhcp" },
+      ],
+    }),
+    sampleHotspotProfiles
+  );
+  assert.ok(dnsPinnedIssues.some((i) => i.id === "wan_canary_matches_all_dns"));
+});
