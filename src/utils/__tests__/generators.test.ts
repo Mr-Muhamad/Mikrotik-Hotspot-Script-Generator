@@ -423,6 +423,7 @@ test("createZipBytes and buildDeploymentReadme produce valid ZIP archive headers
   );
   assert.match(readme, /flash\/hotspot\/login\.html/);
   assert.match(readme, /\/import file-name=hotspot_setup_v7_hs1\.rsc verbose=yes/);
+  assert.match(readme, /\/system reset-configuration no-defaults=yes skip-backup=yes/);
   assert.match(readme, /\/system backup save name=before-hotspot/);
   assert.match(readme, /\/user-manager router print/);
 
@@ -430,6 +431,8 @@ test("createZipBytes and buildDeploymentReadme produce valid ZIP archive headers
     makeBaseConfig({ rosVersion: "v6", authMode: "userman_radius", serverName: "hs1" }),
     "hotspot_setup_v6_hs1.rsc"
   );
+  assert.match(v6Readme, /\/import file-name=hotspot_setup_v6_hs1\.rsc \(omit verbose=yes on v6/);
+  assert.doesNotMatch(v6Readme, /\/import file-name=hotspot_setup_v6_hs1\.rsc verbose=yes/);
   assert.match(v6Readme, /\/tool user-manager router print/);
 
   const zipBytes = createZipBytes([

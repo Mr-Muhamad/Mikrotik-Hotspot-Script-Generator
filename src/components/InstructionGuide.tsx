@@ -51,6 +51,7 @@ export default function InstructionGuide({
   const isMultiWan = config.loadBalancingMethod !== "none" && (config.wanLines?.length || 0) > 0;
   const hasVlans = Boolean(config.enableVlans && config.vlans && config.vlans.length > 0);
   const lanTarget = config.useLanBridge ? (config.lanBridgeName || "bridge-lan") : (config.lanInterface || "ether2");
+  const importCmd = isV7 ? `/import file-name=${scriptFilename} verbose=yes` : `/import file-name=${scriptFilename}`;
 
   const [section, setSection] = useState<GuideSection>("steps");
   const [activeFAQ, setActiveFAQ] = useState<number | null>(0);
@@ -154,8 +155,8 @@ export default function InstructionGuide({
         },
         {
           id: "safemode",
-          title: "الاتصال عبر عنوان MAC في Winbox وتفعيل Safe Mode (Ctrl+X)",
-          detail: "الاتصال بـ MAC يمنع انقطاعك عند تغيير الـ IP أو Bridge، وSafe Mode يتراجع تلقائياً عن أي خطأ يفقد الاتصال.",
+          title: "التوصيل بكابل LAN عبر عنوان MAC وتفعيل Safe Mode (Ctrl+X)",
+          detail: "وصّل الكمبيوتر بأحد منافذ الخروج (LAN) وليس منفذ WAN لتفادي حجب الإدارة عنك، وادخل Winbox بالـ MAC واضغط Ctrl+X لتراجع الراوتر تلقائياً عند أي خطأ.",
         },
         {
           id: "ntp",
@@ -195,8 +196,8 @@ export default function InstructionGuide({
         },
         {
           id: "safemode",
-          title: "Connect via Winbox MAC Address & enable Safe Mode (Ctrl+X)",
-          detail: "MAC connection prevents lockout during IP/bridge edits, and Safe Mode reverts automatically if you disconnect.",
+          title: "Wire into LAN, connect via Winbox MAC & enable Safe Mode (Ctrl+X)",
+          detail: "Plug your PC into a LAN port (never WAN/ether1 so WAN input drops cannot lock you out), connect via MAC Address, and press Ctrl+X for auto-rollback.",
         },
         {
           id: "ntp",
@@ -222,14 +223,16 @@ export default function InstructionGuide({
           cmd: "/system backup save name=before-hotspot\n/export file=before-hotspot",
         },
         {
-          title: "تهيئة راوتر جديد (اختياري تماماً عند الحاجة فقط)",
-          desc: "استخدم هذا الأمر فقط على راوتر اختباري أو جديد تريد مسح إعداداته الافتراضية بالكامل قبل بناء الشبكة من الصفر. لا تنفّذه على راوتر شغال!",
+          title: "متى تعمل ضبط مصنع للراوتر ومتى تتخطاه؟ (قرار مهم)",
+          desc: "يُنصح بضبط المصنع بدون افتراضيات فقط على راوتر جديد أو مستعمل مزدحم بإعدادات قديمة عشوائية؛ وبعد تنفيذ الأمر يمسح الراوتر الـ IP والواي فاي، لذا ابقَ متصلاً بكابل LAN وادخل عبر MAC. أما إذا كان الراوتر شغالاً وعليه مشتركين أو كروت فـ لا تنفذ ضبط المصنع أبداً؛ فالسكربت آمن لإعادة التشغيل (Idempotent) ويتعايش مع defconf وينظف التعارضات تلقائياً.",
           cmd: "/system reset-configuration no-defaults=yes skip-backup=yes",
         },
         {
-          title: `رفع وتنفيذ ملف ${scriptFilename} مع verbose=yes`,
-          desc: "اسحب ملف .rsc إلى نافذة Files في Winbox ثم شغّل أمر الاستيراد أدناه (الخيار verbose=yes يعرض لك رقم السطر الدقيق لو حدث أي تعارض أو اسم كارت مختلف). كما يمكنك نسخ السكربت ولصقه مباشرة في New Terminal.",
-          cmd: `/import file-name=${scriptFilename} verbose=yes`,
+          title: isV7 ? `رفع وتنفيذ ملف ${scriptFilename} مع verbose=yes` : `رفع وتنفيذ ملف ${scriptFilename} (استيراد قياسي لـ v6)`,
+          desc: isV7
+            ? "اسحب ملف .rsc إلى نافذة Files في Winbox ثم نفّذ أمر الاستيراد أدناه (يعرض verbose=yes رقم السطر الدقيق عند أي خطأ). يمكنك أيضاً لصق السكربت في New Terminal."
+            : "اسحب ملف .rsc إلى نافذة Files في Winbox ثم نفّذ أمر الاستيراد القياسي بدون verbose=yes (لأن مفسّر v6 يتعثر أحياناً مع verbose=yes على الأسطر المتعددة)، أو الصق السكربت مباشرة في New Terminal.",
+          cmd: importCmd,
         },
         {
           title: `رفع صفحة الدخول إلى مسار ${htmlFolder}/login.html`,
@@ -239,7 +242,7 @@ export default function InstructionGuide({
         {
           title: "اختبار اتصال الراوتر نفسه بالإنترنت والـ DNS",
           desc: "قبل تجربة أي عميل، تأكد أن الراوتر يصل للإنترنت ويترجم الدومينات (خاصة عند استخدام Multi-WAN أو PPPOE).",
-          cmd: "/ping 8.8.8.8 count=3\n/ping google.com count=3",
+          cmd: "/ping 8.8.4.4 count=3\n/ping google.com count=3",
         },
         {
           title: "إنشاء وإدارة المشتركين أو الكروت",
@@ -265,14 +268,16 @@ export default function InstructionGuide({
           cmd: "/system backup save name=before-hotspot\n/export file=before-hotspot",
         },
         {
-          title: "Clean Wipe on New/Lab Routers (Optional Caution)",
-          desc: "Run this ONLY if starting from an empty router or lab VM. Never run on a live production router.",
+          title: "When to Factory-Reset vs Keep Current Router State",
+          desc: "Factory wipe (no-defaults=yes) is recommended ONLY for a clean start on a new defconf router or an old cluttered router; Wi-Fi/DHCP/IPs will be cleared immediately, so stay wired to LAN and reconnect via Winbox MAC. NEVER run this on a live production router with existing subscribers or containers; the generated script is defconf-compatible and Idempotent (Upsert).",
           cmd: "/system reset-configuration no-defaults=yes skip-backup=yes",
         },
         {
-          title: `Upload & Import ${scriptFilename} with verbose=yes`,
-          desc: "Drag the downloaded .rsc file into Winbox -> Files and run /import with verbose=yes (so RouterOS prints the exact line if anything conflicts). Alternatively paste directly into New Terminal.",
-          cmd: `/import file-name=${scriptFilename} verbose=yes`,
+          title: isV7 ? `Upload & Import ${scriptFilename} with verbose=yes` : `Upload & Import ${scriptFilename} (Standard v6 Import)`,
+          desc: isV7
+            ? "Drag the downloaded .rsc file into Winbox -> Files and run /import with verbose=yes (prints the exact line number if any conflict occurs), or paste directly into New Terminal."
+            : "Drag the downloaded .rsc file into Winbox -> Files and run standard /import WITHOUT verbose=yes (RouterOS v6 /import verbose=yes can choke on multi-line submenus), or paste directly into New Terminal.",
+          cmd: importCmd,
         },
         {
           title: `Upload login.html into ${htmlFolder}/`,
@@ -282,7 +287,7 @@ export default function InstructionGuide({
         {
           title: "Verify Router WAN & DNS Reachability",
           desc: "Confirm the router itself reaches the internet and resolves DNS before testing client phones.",
-          cmd: "/ping 8.8.8.8 count=3\n/ping google.com count=3",
+          cmd: "/ping 8.8.4.4 count=3\n/ping google.com count=3",
         },
         {
           title: "Manage Subscribers & Vouchers",
@@ -560,7 +565,7 @@ export default function InstructionGuide({
       topicAr: "مسار أوامر اليوزر مانجر",
       topicEn: "User Manager CLI Path",
       v6: "/tool user-manager ...",
-      v7: "/user-manager ... (set enabled=yes)",
+      v7: "/user-manager ... (use-profiles=yes)",
     },
     {
       topicAr: "واجهة الإدارة وبوابة المشترك",
@@ -630,11 +635,13 @@ export default function InstructionGuide({
         },
         {
           q: "متى أختار flash/hotspot ولماذا نحتاج Bypass FastTrack و Recursive Failover؟",
-          a: "أجهزة Flash (مثل hEX وhAP وRB4011 وRB5009) تمسح المجلدات خارج flash/ عند إعادة التشغيل، لذا اختر flash/hotspot. كما أن تجاوز FastTrack ضروري لعدم تخطي طوابير السرعة، بينما يفحص Recursive Failover عناوين خارجية مثل 8.8.8.8 لاكتشاف انقطاع الإنترنت الحقيقي خلف المودم.",
+          a: "أجهزة Flash (مثل hEX وhAP وRB4011 وRB5009) تمسح المجلدات خارج flash/ عند إعادة التشغيل، لذا اختر flash/hotspot. كما أن تجاوز FastTrack ضروري لعدم تخطي طوابير السرعة، بينما يفحص Recursive Failover عناوين مستقلة مثل 8.8.4.4 و 1.0.0.1 لاكتشاف انقطاع الإنترنت الحقيقي خلف المودم دون تعطيل DNS الأساسي.",
         },
         {
           q: "ماذا أفعل إذا توقف تنفيذ السكربت عند سطر معين بسبب اسم واجهة أو عنصر موجود مسبقاً؟",
-          a: "استورد السكربت دائماً عبر /import file-name=... verbose=yes مع تفعيل Safe Mode (Ctrl+X). يعرض لك verbose=yes رقم السطر الدقيق الذي توقف عنده التنفيذ (مثل وجود اسم Bridge أو DHCP مسبقاً) فتعدّله فوراً أو تحذف العنصر المكرر.",
+          a: isV7
+            ? "استورد السكربت على v7 عبر /import file-name=... verbose=yes مع تفعيل Safe Mode (Ctrl+X) ليظهر لك رقم السطر الدقيق عند أي خطأ وتتراجع تلقائياً لو انقطع الاتصال."
+            : "على v6 فعّل Safe Mode (Ctrl+X) واستورد بالصيغة القياسية /import file-name=... (بدون verbose=yes لأن وضع verbose في v6 يتعثر مع الأسطر المتعددة)، أو الصقه في New Terminal، وتحقق من أسماء المنافذ بـ /interface ethernet print.",
         },
       ]
     : [
@@ -644,7 +651,7 @@ export default function InstructionGuide({
         },
         {
           q: "What changed between User Manager v6 and v7?",
-          a: "User Manager v6 uses /tool user-manager with a master customer, starts-at=logon|now, and rate-limit-burst-treshold-rx/tx. User Manager v7 uses /user-manager (set enabled=yes), replaces customer with user groups, fixes threshold spelling, and adds reset-counters-interval.",
+          a: "User Manager v6 uses /tool user-manager with a master customer, starts-at=logon|now, and rate-limit-burst-treshold-rx/tx. User Manager v7 uses /user-manager (set enabled=yes use-profiles=yes), replaces customer with user groups, fixes threshold spelling, and adds reset-counters-interval.",
         },
         {
           q: "How do Day/Night speed schedules work?",
@@ -660,11 +667,13 @@ export default function InstructionGuide({
         },
         {
           q: "When should I use flash/hotspot, FastTrack bypass, and Recursive Failover?",
-          a: "Use flash/hotspot on Flash RouterBoards (hEX, hAP, RB4011, RB5009) so files survive reboots. Keep FastTrack bypass enabled so Queues apply, and use Recursive Failover to detect upstream ISP outages behind modems.",
+          a: "Use flash/hotspot on Flash RouterBoards (hEX, hAP, RB4011, RB5009) so files survive reboots. Keep FastTrack bypass enabled so Queues apply, and use Recursive Failover (e.g. 8.8.4.4 / 1.0.0.1 kept separate from primary DNS) to detect upstream ISP outages behind modems.",
         },
         {
           q: "How do I recover cleanly if /import stops mid-script?",
-          a: "Always enable Safe Mode (Ctrl+X) first and run /import file-name=... verbose=yes so RouterOS displays the exact offending line (such as a pre-existing bridge/pool name) while protecting you from lockout.",
+          a: isV7
+            ? "Always enable Safe Mode (Ctrl+X) first and run /import file-name=... verbose=yes so RouterOS v7 displays the exact offending line while protecting you from lockout."
+            : "Always enable Safe Mode (Ctrl+X) first and run standard /import file-name=... (omit verbose=yes on RouterOS v6 or paste into New Terminal), then verify physical port names with /interface ethernet print.",
         },
       ];
 

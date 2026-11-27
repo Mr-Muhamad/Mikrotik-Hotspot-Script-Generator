@@ -491,8 +491,8 @@ export default function LoadBalancingTab({ config, onChange, lang, issues = [] }
               />
               <span>
                 {isAr
-                  ? "تفعيل الفيل أوفر الحقيقي للإنترنت (Recursive Failover) عبر فحص 8.8.8.8 / 1.1.1.1 بدلاً من الاكتفاء ببينج المودم."
-                  : "Enable Recursive Internet Failover (pings external targets like 8.8.8.8 / 1.1.1.1 instead of only the local modem)."}
+                  ? "تفعيل الفيل أوفر الحقيقي للإنترنت (Recursive Failover) عبر فحص عناوين مستقلة مثل 8.8.4.4 / 1.0.0.1 بدلاً من الاكتفاء ببينج المودم."
+                  : "Enable Recursive Internet Failover (pings dedicated targets like 8.8.4.4 / 1.0.0.1 kept separate from primary DNS)."}
               </span>
             </label>
 

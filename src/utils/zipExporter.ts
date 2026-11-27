@@ -171,6 +171,7 @@ export function buildDeploymentReadme(
   const useRadius = authMode !== "hotspot_only";
   const isExternalRadius = useRadius && config.radiusBackend === "external_radius";
   const portalUrl = `http://${config.dnsName || "hotspot.local"}/login.html`;
+  const importCmd = isV7 ? `/import file-name=${scriptFilename} verbose=yes` : `/import file-name=${scriptFilename}`;
 
   const verifyUmCmds = useRadius
     ? isExternalRadius
@@ -219,16 +220,18 @@ export function buildDeploymentReadme(
       umNoteAr,
       `الحزم المطلوبة    : system, hotspot${useRadius && !isExternalRadius ? ", user-manager (extra package)" : ""}`,
       "",
-      "1) إجراءات السلامة والنسخ الاحتياطي قبل التنفيذ (في Winbox New Terminal):",
-      "   - اتصل عبر عنوان MAC في Winbox واضغط Ctrl+X لتفعيل الوضع الآمن (Safe Mode).",
+      "1) إجراءات السلامة والنسخ الاحتياطي وضبط المصنع قبل التنفيذ:",
+      "   - وصّل جهازك بكابل في منفذ LAN (وليس WAN/ether1)، ادخل Winbox عبر MAC Address واضغط Ctrl+X لتفعيل Safe Mode.",
       "   - خذ نسخة احتياطية كاملة قبل استيراد السكربت:",
       "     /system backup save name=before-hotspot",
       "     /export file=before-hotspot",
       "   - تحقق من الحزم المثبتة (/system package print) وأسماء المنافذ (/interface ethernet print).",
+      "   - ضبط المصنع (/system reset-configuration no-defaults=yes skip-backup=yes): يُنصح به فقط على راوتر جديد أو مزدحم بإعدادات قديمة (وبعده ادخل بكابل LAN عبر MAC).",
+      "   - لا تقم بضبط المصنع على راوتر شغال عليه مشتركون؛ فالسكربت متوافق مع defconf وآمن لإعادة التحديث (Idempotent).",
       "",
       "2) استيراد السكربت الرئيسي في Winbox:",
       `   - اسحب الملف '${scriptFilename}' إلى نافذة Winbox -> Files`,
-      `   - افتح New Terminal ونفذ الأمر: /import file-name=${scriptFilename} verbose=yes`,
+      `   - افتح New Terminal ونفذ الأمر: ${importCmd}${isV7 ? "" : " (بدون verbose=yes في v6، أو الصق في New Terminal)"}`,
       "",
       "3) رفع حزمة بوابة الدخول الكاملة (5 ملفات) بعد استيراد السكربت:",
       "   - مهم: استورد ملف .rsc أولا حتى يقوم RouterOS بإنشاء مجلد الهوتسبوت والملفات الافتراضية المرافقة (مثل errors.txt).",
@@ -282,16 +285,18 @@ export function buildDeploymentReadme(
     umNote,
     `Required Packages: system, hotspot${useRadius && !isExternalRadius ? ", user-manager (extra package)" : ""}`,
     "",
-    "1) Pre-flight Safety & Backup (Recommended in Winbox New Terminal):",
-    "   - Connect via Winbox MAC Address and press Ctrl+X to enable Safe Mode.",
+    "1) Pre-flight Safety, Factory Reset Guidance & Backup (in Winbox New Terminal):",
+    "   - Plug into a LAN port (NOT WAN/ether1), connect via Winbox MAC Address, and press Ctrl+X to enable Safe Mode.",
     "   - Take a rollback backup before importing:",
     "     /system backup save name=before-hotspot",
     "     /export file=before-hotspot",
     "   - Check installed packages (/system package print) and interface names (/interface ethernet print).",
+    "   - Factory reset (/system reset-configuration no-defaults=yes skip-backup=yes): recommended only on new/cluttered routers (reconnect via wired LAN + MAC afterwards).",
+    "   - Skip reset on live production routers with active subscribers; this script is defconf-compatible and Idempotent (Upsert).",
     "",
     "2) Import Master Script in Winbox:",
     `   - Drag '${scriptFilename}' into Winbox -> Files`,
-    `   - Open New Terminal and run: /import file-name=${scriptFilename} verbose=yes`,
+    `   - Open New Terminal and run: ${importCmd}${isV7 ? "" : " (omit verbose=yes on v6 or paste into New Terminal)"}`,
     "",
     "3) Deploy Full 5-File Captive Portal Suite (AFTER Importing .rsc):",
     "   - Important: Import the .rsc script FIRST so RouterOS creates the hotspot folder and default companion files (such as errors.txt).",
